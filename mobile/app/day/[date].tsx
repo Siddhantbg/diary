@@ -17,7 +17,7 @@ import { useSettings } from '@/context/SettingsContext';
 import { DiaryEntry } from '@/lib/api';
 import { MoodPicker } from '@/components/MoodPicker';
 import { PhotoGrid } from '@/components/PhotoGrid';
-import { formatLongDate } from '@/lib/dates';
+import { formatLogTime, formatLongDate } from '@/lib/dates';
 import { colors, fonts, spacing } from '@/constants/theme';
 
 const emptyEntry = (date: string): DiaryEntry => ({
@@ -25,6 +25,7 @@ const emptyEntry = (date: string): DiaryEntry => ({
   date,
   title: '',
   body: '',
+  logs: [],
   mood: null,
   tags: [],
   people: [],
@@ -40,10 +41,12 @@ export default function DayScreen() {
   const router = useRouter();
 
   const [entry, setEntry] = useState<DiaryEntry>(emptyEntry(date || ''));
+  const [draft, setDraft] = useState('');
   const [tagsText, setTagsText] = useState('');
   const [peopleText, setPeopleText] = useState('');
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [savingMeta, setSavingMeta] = useState(false);
+  const [savingLog, setSavingLog] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [error, setError] = useState('');
@@ -60,7 +63,7 @@ export default function DayScreen() {
     setError('');
     try {
       const data = await api.getEntry(date);
-      setEntry(data);
+      setEntry({ ...data, logs: data.logs || [] });
       setTagsText(data.tags.join(', '));
       setPeopleText(data.people.join(', '));
       setDirty(false);
@@ -90,15 +93,14 @@ export default function DayScreen() {
     setDirty(true);
   };
 
-  const save = useCallback(async () => {
+  const saveMeta = useCallback(async () => {
     if (!api || !date) return;
-    setSaving(true);
+    setSavingMeta(true);
     setError('');
     try {
       const current = stateRef.current;
       const payload = {
         title: current.entry.title,
-        body: current.entry.body,
         mood: current.entry.mood,
         favorite: current.entry.favorite,
         weatherNote: current.entry.weatherNote,
@@ -112,16 +114,59 @@ export default function DayScreen() {
           .filter(Boolean),
       };
       const saved = await api.saveEntry(date, payload);
-      setEntry(saved);
+      setEntry({ ...saved, logs: saved.logs || [] });
       setTagsText(saved.tags.join(', '));
       setPeopleText(saved.people.join(', '));
       setDirty(false);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Save failed');
     } finally {
-      setSaving(false);
+      setSavingMeta(false);
     }
   }, [api, date]);
+
+  const saveLog = async () => {
+    if (!api || !date) return;
+    const text = draft.trim();
+    if (!text) {
+      Alert.alert('Empty log', 'Write something before saving.');
+      return;
+    }
+
+    setSavingLog(true);
+    setError('');
+    try {
+      if (dirty) await saveMeta();
+      // Device system time at the moment you tap Save
+      const at = new Date().toISOString();
+      const saved = await api.addLog(date, text, at);
+      setEntry({ ...saved, logs: saved.logs || [] });
+      setDraft('');
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to save log');
+    } finally {
+      setSavingLog(false);
+    }
+  };
+
+  const removeLog = (logId: string) => {
+    Alert.alert('Delete this log?', 'Only this timed note will be removed.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          if (!api || !date) return;
+          try {
+            const saved = await api.deleteLog(date, logId);
+            setEntry({ ...saved, logs: saved.logs || [] });
+          } catch (e: unknown) {
+            Alert.alert('Error', e instanceof Error ? e.message : 'Delete failed');
+          }
+        },
+      },
+    ]);
+  };
 
   const addPhoto = async () => {
     if (!api || !date) return;
@@ -153,7 +198,7 @@ export default function DayScreen() {
         return;
       }
       result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
         quality: 0.8,
         allowsMultipleSelection: true,
         selectionLimit: 6,
@@ -164,13 +209,13 @@ export default function DayScreen() {
 
     setUploading(true);
     try {
-      if (dirty) await save();
+      if (dirty) await saveMeta();
       let latest = entry;
       for (const asset of result.assets) {
         const res = await api.uploadPhoto(date, asset.uri);
         latest = res.entry;
       }
-      setEntry(latest);
+      setEntry({ ...latest, logs: latest.logs || [] });
     } catch (e: unknown) {
       Alert.alert('Upload failed', e instanceof Error ? e.message : 'Unknown error');
     } finally {
@@ -201,7 +246,7 @@ export default function DayScreen() {
   };
 
   const removeDay = () => {
-    Alert.alert('Delete this day?', 'Entry and photos will be removed.', [
+    Alert.alert('Delete this day?', 'All logs and photos will be removed.', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete',
@@ -227,6 +272,8 @@ export default function DayScreen() {
     );
   }
 
+  const logs = entry.logs || [];
+
   return (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
@@ -236,9 +283,13 @@ export default function DayScreen() {
         options={{
           title: date ? formatLongDate(date) : 'Day',
           headerRight: () => (
-            <Pressable onPress={() => save()} disabled={saving} style={{ paddingHorizontal: 8 }}>
+            <Pressable
+              onPress={() => saveMeta()}
+              disabled={savingMeta}
+              style={{ paddingHorizontal: 8 }}
+            >
               <Text style={{ fontFamily: fonts.bodyMedium, color: colors.leaf }}>
-                {saving ? '…' : 'Save'}
+                {savingMeta ? '…' : 'Save'}
               </Text>
             </Pressable>
           ),
@@ -253,7 +304,7 @@ export default function DayScreen() {
               {entry.favorite ? '★ Cherished' : '☆ Mark cherished'}
             </Text>
           </Pressable>
-          {dirty ? <Text style={styles.dirty}>Unsaved</Text> : null}
+          {dirty ? <Text style={styles.dirty}>Unsaved details</Text> : null}
         </View>
 
         <TextInput
@@ -264,15 +315,38 @@ export default function DayScreen() {
           onChangeText={(t) => patch('title', t)}
         />
 
+        <Text style={styles.sectionLabel}>Timeline</Text>
+        {logs.length === 0 ? (
+          <Text style={styles.muted}>No logs yet — write below and tap Save log.</Text>
+        ) : (
+          logs.map((log) => (
+            <Pressable
+              key={log.id}
+              style={styles.logBlock}
+              onLongPress={() => removeLog(log.id)}
+            >
+              <Text style={styles.logTime}>{formatLogTime(log.at)}</Text>
+              <Text style={styles.logText}>{log.text}</Text>
+            </Pressable>
+          ))
+        )}
+
+        <Text style={[styles.sectionLabel, { marginTop: spacing.lg }]}>New log</Text>
         <TextInput
-          style={styles.body}
-          placeholder="What happened? What do you want to remember?"
+          style={styles.draft}
+          placeholder="What is happening right now?"
           placeholderTextColor={colors.inkMuted}
-          value={entry.body}
-          onChangeText={(t) => patch('body', t)}
+          value={draft}
+          onChangeText={setDraft}
           multiline
           textAlignVertical="top"
         />
+        <Pressable style={styles.saveLog} onPress={saveLog} disabled={savingLog}>
+          <Text style={styles.saveLogText}>
+            {savingLog ? 'Saving…' : 'Save log (uses phone time)'}
+          </Text>
+        </Pressable>
+        <Text style={styles.hint}>Long-press a log to delete it.</Text>
 
         <MoodPicker value={entry.mood} onChange={(m) => patch('mood', m)} />
 
@@ -316,8 +390,10 @@ export default function DayScreen() {
           uploading={uploading}
         />
 
-        <Pressable style={styles.saveBig} onPress={save} disabled={saving}>
-          <Text style={styles.saveBigText}>{saving ? 'Saving…' : 'Save day'}</Text>
+        <Pressable style={styles.saveBig} onPress={saveMeta} disabled={savingMeta}>
+          <Text style={styles.saveBigText}>
+            {savingMeta ? 'Saving…' : 'Save day details'}
+          </Text>
         </Pressable>
 
         {entry.id ? (
@@ -359,12 +435,63 @@ const styles = StyleSheet.create({
     color: colors.ink,
     marginBottom: spacing.md,
   },
-  body: {
+  sectionLabel: {
+    fontFamily: fonts.bodyMedium,
+    fontSize: 12,
+    color: colors.inkMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginBottom: spacing.sm,
+  },
+  muted: {
+    fontFamily: fonts.body,
+    color: colors.inkMuted,
+    marginBottom: spacing.md,
+  },
+  logBlock: {
+    paddingVertical: spacing.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.line,
+  },
+  logTime: {
+    fontFamily: fonts.bodyMedium,
+    fontSize: 13,
+    color: colors.leaf,
+    marginBottom: 6,
+    letterSpacing: 0.3,
+  },
+  logText: {
     fontFamily: fonts.body,
     fontSize: 17,
     lineHeight: 26,
     color: colors.ink,
-    minHeight: 160,
+  },
+  draft: {
+    fontFamily: fonts.body,
+    fontSize: 17,
+    lineHeight: 26,
+    color: colors.ink,
+    minHeight: 110,
+    marginBottom: spacing.sm,
+    borderBottomWidth: 1.5,
+    borderBottomColor: colors.leaf,
+    paddingBottom: spacing.sm,
+  },
+  saveLog: {
+    backgroundColor: colors.leaf,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  saveLogText: {
+    color: colors.white,
+    fontFamily: fonts.bodyMedium,
+    fontSize: 15,
+  },
+  hint: {
+    fontFamily: fonts.body,
+    fontSize: 12,
+    color: colors.inkMuted,
+    marginTop: 8,
     marginBottom: spacing.sm,
   },
   label: {

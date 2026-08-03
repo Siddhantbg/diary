@@ -1,5 +1,13 @@
 const mongoose = require('mongoose');
 
+const logSchema = new mongoose.Schema(
+  {
+    text: { type: String, required: true, trim: true },
+    at: { type: Date, required: true },
+  },
+  { _id: true }
+);
+
 const entrySchema = new mongoose.Schema(
   {
     date: {
@@ -10,6 +18,7 @@ const entrySchema = new mongoose.Schema(
     },
     title: { type: String, default: '' },
     body: { type: String, default: '' },
+    logs: { type: [logSchema], default: [] },
     mood: { type: Number, min: 1, max: 5, default: null },
     tags: { type: [String], default: [] },
     people: { type: [String], default: [] },
@@ -20,6 +29,6 @@ const entrySchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-entrySchema.index({ title: 'text', body: 'text', tags: 'text', people: 'text' });
+entrySchema.index({ title: 'text', body: 'text', tags: 'text', people: 'text', 'logs.text': 'text' });
 
 module.exports = mongoose.model('Entry', entrySchema);

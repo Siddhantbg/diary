@@ -1,8 +1,15 @@
+export type TimedLog = {
+  id: string;
+  text: string;
+  at: string;
+};
+
 export type DiaryEntry = {
   id: string;
   date: string;
   title: string;
   body: string;
+  logs: TimedLog[];
   mood: number | null;
   tags: string[];
   people: string[];
@@ -92,6 +99,13 @@ export function createApi(apiUrl: string, apiSecret: string) {
     getEntry: (date: string) => request<DiaryEntry>(`/entries/${date}`),
     saveEntry: (date: string, payload: Partial<DiaryEntry>) =>
       request<DiaryEntry>(`/entries/${date}`, { method: 'PUT', body: payload }),
+    addLog: (date: string, text: string, at: string) =>
+      request<DiaryEntry>(`/entries/${date}/logs`, {
+        method: 'POST',
+        body: { text, at },
+      }),
+    deleteLog: (date: string, logId: string) =>
+      request<DiaryEntry>(`/entries/${date}/logs/${logId}`, { method: 'DELETE' }),
     deleteEntry: (date: string) =>
       request<{ ok: boolean }>(`/entries/${date}`, { method: 'DELETE' }),
     search: (q: string) => request<DiaryEntry[]>(`/entries/search?q=${encodeURIComponent(q)}`),

@@ -34,4 +34,13 @@ export function monthRange(year: number, monthIndex: number) {
   return { from, to };
 }
 
+export function formatLogTime(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleTimeString(undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
 export const MOOD_LABELS = ['', 'Rough', 'Low', 'Okay', 'Good', 'Great'] as const;

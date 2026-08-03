@@ -10,7 +10,9 @@ type Props = {
 };
 
 export function EntryCard({ entry }: Props) {
-  const preview = (entry.body || '').replace(/\s+/g, ' ').trim();
+  const logs = entry.logs || [];
+  const latest = logs.length ? logs[logs.length - 1].text : entry.body || '';
+  const preview = latest.replace(/\s+/g, ' ').trim();
 
   return (
     <Link href={`/day/${entry.date}`} asChild>
@@ -28,6 +30,11 @@ export function EntryCard({ entry }: Props) {
           </Text>
         )}
         <View style={styles.footer}>
+          {logs.length ? (
+            <Text style={styles.chip}>
+              {logs.length} log{logs.length > 1 ? 's' : ''}
+            </Text>
+          ) : null}
           {entry.mood ? (
             <Text style={styles.chip}>{MOOD_LABELS[entry.mood]}</Text>
           ) : null}
