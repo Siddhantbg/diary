@@ -64,14 +64,18 @@ npx expo start
 
 Scan the QR code with Expo Go on Android.
 
-### First-time Settings in the app
+### First-time setup
 
-1. **API URL** — your PC LAN IP, e.g. `http://192.168.1.23:4000`  
-   Find IP: `ipconfig` (Windows) → IPv4 Address. Phone and PC must be on the same Wi‑Fi.  
-   Android emulator can use `http://10.0.2.2:4000`.
-2. **API secret** — same value as `API_SECRET` in `server/.env`
-3. Tap **Test**, then **Save**
-4. Optional: enable a PIN under Privacy lock
+API URL and secret are wired in the app (`mobile/lib/env.ts` + optional `mobile/.env`):
+
+```ts
+process.env.EXPO_PUBLIC_API_URL || 'https://diary-api-2xnl.onrender.com'
+process.env.EXPO_PUBLIC_API_SECRET || '<same as server API_SECRET>'
+```
+
+No in-app API settings. For local backend, put `EXPO_PUBLIC_API_URL=http://YOUR_LAN_IP:4000` in `mobile/.env` and restart Expo.
+
+Optional: enable a PIN under Settings → Privacy lock.
 
 ## Deploy API to Render
 

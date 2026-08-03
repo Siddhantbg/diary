@@ -21,11 +21,6 @@ export default function CalendarScreen() {
 
   const load = useCallback(
     async (year: number, month: number) => {
-      if (!api) {
-        setLoading(false);
-        setError('Connect your API in Settings.');
-        return;
-      }
       setError('');
       try {
         const { from, to } = monthRange(year, month);

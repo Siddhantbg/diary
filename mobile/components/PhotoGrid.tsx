@@ -25,7 +25,7 @@ export function PhotoGrid({ photoIds, onAdd, onDelete, uploading }: Props) {
       </View>
       <View style={styles.grid}>
         {photoIds.map((id) => {
-          const uri = api ? api.photoUrl(id) : '';
+          const uri = api.photoUrl(id);
           return (
             <View key={id} style={styles.cell}>
               <Link href={`/photo/${id}`} asChild>

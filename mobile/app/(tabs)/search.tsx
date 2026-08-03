@@ -21,7 +21,6 @@ export default function SearchScreen() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    if (!api) return;
     api
       .listFavorites()
       .then(setFavorites)
@@ -29,7 +28,6 @@ export default function SearchScreen() {
   }, [api]);
 
   useEffect(() => {
-    if (!api) return;
     const term = q.trim();
     if (!term) {
       setResults([]);

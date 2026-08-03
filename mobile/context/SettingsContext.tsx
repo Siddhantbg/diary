@@ -1,23 +1,13 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { createApi, DiaryApi } from '@/lib/api';
-import {
-  AppConfig,
-  clearPin,
-  loadConfig,
-  saveApiSecret,
-  saveApiUrl,
-  savePin,
-  verifyPin,
-} from '@/lib/config';
+import { AppConfig, clearPin, loadConfig, savePin, verifyPin } from '@/lib/config';
 
 type SettingsContextValue = {
   ready: boolean;
   config: AppConfig;
-  api: DiaryApi | null;
+  api: DiaryApi;
   unlocked: boolean;
   refreshConfig: () => Promise<void>;
-  updateApiUrl: (url: string) => Promise<void>;
-  updateApiSecret: (secret: string) => Promise<void>;
   enablePin: (pin: string) => Promise<void>;
   disablePin: () => Promise<void>;
   unlockWithPin: (pin: string) => Promise<boolean>;
@@ -50,10 +40,10 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     refreshConfig();
   }, [refreshConfig]);
 
-  const api = useMemo(() => {
-    if (!config.apiUrl || !config.apiSecret) return null;
-    return createApi(config.apiUrl, config.apiSecret);
-  }, [config.apiUrl, config.apiSecret]);
+  const api = useMemo(
+    () => createApi(config.apiUrl || 'https://diary-api-2xnl.onrender.com', config.apiSecret),
+    [config.apiUrl, config.apiSecret]
+  );
 
   const value: SettingsContextValue = {
     ready,
@@ -61,14 +51,6 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     api,
     unlocked,
     refreshConfig,
-    updateApiUrl: async (url) => {
-      await saveApiUrl(url);
-      await refreshConfig();
-    },
-    updateApiSecret: async (secret) => {
-      await saveApiSecret(secret);
-      await refreshConfig();
-    },
     enablePin: async (pin) => {
       await savePin(pin);
       setUnlocked(true);

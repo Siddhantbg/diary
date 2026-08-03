@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import {
   Alert,
   Pressable,
@@ -12,42 +12,16 @@ import { useSettings } from '@/context/SettingsContext';
 import { colors, fonts, spacing } from '@/constants/theme';
 
 export default function SettingsScreen() {
-  const {
-    config,
-    updateApiUrl,
-    updateApiSecret,
-    enablePin,
-    disablePin,
-    lock,
-    api,
-  } = useSettings();
-
-  const [apiUrl, setApiUrl] = useState(config.apiUrl);
-  const [apiSecret, setApiSecret] = useState(config.apiSecret);
+  const { config, enablePin, disablePin, lock, api } = useSettings();
   const [pin, setPin] = useState('');
   const [status, setStatus] = useState('');
 
-  useEffect(() => {
-    setApiUrl(config.apiUrl);
-    setApiSecret(config.apiSecret);
-  }, [config.apiUrl, config.apiSecret]);
-
-  const saveConnection = async () => {
-    await updateApiUrl(apiUrl.trim());
-    await updateApiSecret(apiSecret.trim());
-    setStatus('Saved connection settings.');
-  };
-
   const testConnection = async () => {
     try {
-      const url = apiUrl.trim().replace(/\/$/, '');
-      const res = await fetch(`${url}/health`);
+      const res = await fetch(`${config.apiUrl}/health`);
       const data = await res.json();
-      setStatus(`Health: ${data.ok ? 'ok' : 'fail'} · mongo: ${data.mongo}`);
-      if (api) {
-        await api.listEntries(1);
-        setStatus((s) => `${s} · auth: ok`);
-      }
+      await api.listEntries(1);
+      setStatus(`Connected · mongo: ${data.mongo}`);
     } catch (e: unknown) {
       setStatus(e instanceof Error ? e.message : 'Connection failed');
     }
@@ -65,40 +39,13 @@ export default function SettingsScreen() {
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
-      <Text style={styles.section}>API connection</Text>
+      <Text style={styles.section}>Connection</Text>
       <Text style={styles.help}>
-        Local testing: use your PC LAN IP, e.g. http://192.168.1.10:4000. After Render deploy, paste
-        the https URL here.
+        API is wired in the app automatically. No keys to paste here.
       </Text>
-      <Text style={styles.label}>API URL</Text>
-      <TextInput
-        style={styles.input}
-        value={apiUrl}
-        onChangeText={setApiUrl}
-        autoCapitalize="none"
-        autoCorrect={false}
-        placeholder="http://192.168.x.x:4000"
-        placeholderTextColor={colors.inkMuted}
-      />
-      <Text style={styles.label}>API secret</Text>
-      <TextInput
-        style={styles.input}
-        value={apiSecret}
-        onChangeText={setApiSecret}
-        autoCapitalize="none"
-        autoCorrect={false}
-        secureTextEntry
-        placeholder="Same as server API_SECRET"
-        placeholderTextColor={colors.inkMuted}
-      />
-      <View style={styles.row}>
-        <Pressable style={styles.btn} onPress={saveConnection}>
-          <Text style={styles.btnText}>Save</Text>
-        </Pressable>
-        <Pressable style={[styles.btn, styles.btnGhost]} onPress={testConnection}>
-          <Text style={[styles.btnText, styles.btnGhostText]}>Test</Text>
-        </Pressable>
-      </View>
+      <Pressable style={styles.btn} onPress={testConnection}>
+        <Text style={styles.btnText}>Test connection</Text>
+      </Pressable>
       {!!status && <Text style={styles.status}>{status}</Text>}
 
       <Text style={[styles.section, { marginTop: spacing.xl }]}>Privacy lock</Text>
@@ -162,14 +109,6 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
     lineHeight: 22,
   },
-  label: {
-    fontFamily: fonts.bodyMedium,
-    fontSize: 12,
-    color: colors.inkMuted,
-    textTransform: 'uppercase',
-    letterSpacing: 0.7,
-    marginBottom: 4,
-  },
   input: {
     fontFamily: fonts.body,
     fontSize: 16,
@@ -184,6 +123,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.leaf,
     paddingHorizontal: 16,
     paddingVertical: 12,
+    alignSelf: 'flex-start',
   },
   btnText: {
     color: colors.white,

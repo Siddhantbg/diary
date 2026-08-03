@@ -57,7 +57,7 @@ export default function DayScreen() {
   const load = useCallback(async () => {
     if (!api || !date) {
       setLoading(false);
-      setError(!api ? 'Connect API in Settings.' : 'Missing date');
+      setError(!date ? 'Missing date' : 'Loading…');
       return;
     }
     setError('');

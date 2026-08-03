@@ -55,8 +55,8 @@ export function createApi(apiUrl: string, apiSecret: string) {
   const base = apiUrl.replace(/\/$/, '');
 
   async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
-    if (!base) throw new ApiError(0, 'Set your API URL in Settings');
-    if (!apiSecret) throw new ApiError(0, 'Set your API secret in Settings');
+    if (!base) throw new ApiError(0, 'API URL is not configured');
+    if (!apiSecret) throw new ApiError(0, 'API secret is not configured');
 
     const headers: Record<string, string> = {
       'x-api-secret': apiSecret,

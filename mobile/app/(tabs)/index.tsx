@@ -16,7 +16,7 @@ import { toDateKey } from '@/lib/dates';
 import { colors, fonts, spacing } from '@/constants/theme';
 
 export default function HomeScreen() {
-  const { api, config } = useSettings();
+  const { api } = useSettings();
   const [recent, setRecent] = useState<DiaryEntry[]>([]);
   const [onThisDay, setOnThisDay] = useState<DiaryEntry[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
@@ -27,11 +27,6 @@ export default function HomeScreen() {
   const today = toDateKey();
 
   const load = useCallback(async () => {
-    if (!api) {
-      setLoading(false);
-      setError('Connect your API in Settings to begin.');
-      return;
-    }
     setError('');
     try {
       const now = new Date();
@@ -93,13 +88,6 @@ export default function HomeScreen() {
       {!!error && (
         <View style={styles.errorBox}>
           <Text style={styles.errorText}>{error}</Text>
-          {!config.apiSecret || !config.apiUrl ? (
-            <Link href="/(tabs)/settings" asChild>
-              <Pressable>
-                <Text style={styles.link}>Open Settings</Text>
-              </Pressable>
-            </Link>
-          ) : null}
         </View>
       )}
 
@@ -224,10 +212,5 @@ const styles = StyleSheet.create({
   errorText: {
     fontFamily: fonts.body,
     color: colors.danger,
-  },
-  link: {
-    marginTop: 8,
-    fontFamily: fonts.bodyMedium,
-    color: colors.leaf,
   },
 });
