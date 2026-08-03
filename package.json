@@ -1,0 +1,9 @@
+{
+  "name": "personal-memory-diary",
+  "private": true,
+  "scripts": {
+    "server": "npm --prefix server run dev",
+    "server:start": "npm --prefix server start",
+    "mobile": "npm --prefix mobile start"
+  }
+}

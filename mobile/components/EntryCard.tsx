@@ -1,0 +1,98 @@
+import React from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Link } from 'expo-router';
+import { DiaryEntry } from '@/lib/api';
+import { formatShortDate, MOOD_LABELS } from '@/lib/dates';
+import { colors, fonts, spacing } from '@/constants/theme';
+
+type Props = {
+  entry: DiaryEntry;
+};
+
+export function EntryCard({ entry }: Props) {
+  const preview = (entry.body || '').replace(/\s+/g, ' ').trim();
+
+  return (
+    <Link href={`/day/${entry.date}`} asChild>
+      <Pressable style={styles.row}>
+        <View style={styles.meta}>
+          <Text style={styles.date}>{formatShortDate(entry.date)}</Text>
+          {entry.favorite ? <Text style={styles.star}>★</Text> : null}
+        </View>
+        <Text style={styles.title} numberOfLines={1}>
+          {entry.title || 'Untitled day'}
+        </Text>
+        {!!preview && (
+          <Text style={styles.body} numberOfLines={2}>
+            {preview}
+          </Text>
+        )}
+        <View style={styles.footer}>
+          {entry.mood ? (
+            <Text style={styles.chip}>{MOOD_LABELS[entry.mood]}</Text>
+          ) : null}
+          {entry.photoIds?.length ? (
+            <Text style={styles.chip}>{entry.photoIds.length} photo{entry.photoIds.length > 1 ? 's' : ''}</Text>
+          ) : null}
+          {entry.people?.slice(0, 2).map((p) => (
+            <Text key={p} style={styles.chip}>
+              {p}
+            </Text>
+          ))}
+        </View>
+      </Pressable>
+    </Link>
+  );
+}
+
+const styles = StyleSheet.create({
+  row: {
+    paddingVertical: spacing.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.line,
+  },
+  meta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 4,
+  },
+  date: {
+    fontFamily: fonts.body,
+    fontSize: 13,
+    color: colors.inkMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+  },
+  star: {
+    color: colors.favorite,
+    fontSize: 14,
+  },
+  title: {
+    fontFamily: fonts.display,
+    fontSize: 20,
+    color: colors.ink,
+    marginBottom: 4,
+  },
+  body: {
+    fontFamily: fonts.body,
+    fontSize: 15,
+    lineHeight: 22,
+    color: colors.inkMuted,
+  },
+  footer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 10,
+  },
+  chip: {
+    fontFamily: fonts.body,
+    fontSize: 12,
+    color: colors.leaf,
+    backgroundColor: colors.leafSoft,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    overflow: 'hidden',
+  },
+});
