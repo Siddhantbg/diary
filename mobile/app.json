@@ -12,7 +12,8 @@
       "infoPlist": {
         "NSCameraUsageDescription": "Attach photos from your camera to diary days.",
         "NSPhotoLibraryUsageDescription": "Attach photos from your library to diary days.",
-        "NSFaceIDUsageDescription": "Unlock your diary with Face ID."
+        "NSFaceIDUsageDescription": "Unlock your diary with Face ID.",
+        "NSMicrophoneUsageDescription": "Record voice notes for your diary days."
       }
     },
     "android": {
@@ -25,6 +26,7 @@
       },
       "permissions": [
         "CAMERA",
+        "RECORD_AUDIO",
         "READ_MEDIA_IMAGES",
         "READ_EXTERNAL_STORAGE"
       ],
@@ -46,13 +48,20 @@
         }
       ],
       [
+        "expo-av",
+        {
+          "microphonePermission": "Allow Diary to record voice notes for your days."
+        }
+      ],
+      [
         "expo-splash-screen",
         {
           "image": "./assets/images/splash-icon.png",
           "resizeMode": "contain",
           "backgroundColor": "#F3F6F2"
         }
-      ]
+      ],
+      "@react-native-community/datetimepicker"
     ],
     "experiments": {
       "typedRoutes": true

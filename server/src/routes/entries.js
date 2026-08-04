@@ -7,7 +7,7 @@ const { getBucket } = require('../gridfs');
 const router = express.Router();
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 12 * 1024 * 1024 },
+  limits: { fileSize: 30 * 1024 * 1024 },
 });
 
 function normalizeList(value) {
@@ -57,7 +57,9 @@ function serializeEntry(entry) {
     tags: obj.tags || [],
     people: obj.people || [],
     favorite: !!obj.favorite,
+    legendId: obj.legendId ? String(obj.legendId) : '',
     photoIds: (obj.photoIds || []).map(String),
+    voiceIds: (obj.voiceIds || []).map(String),
     weatherNote: obj.weatherNote || '',
     createdAt: obj.createdAt,
     updatedAt: obj.updatedAt,
@@ -117,7 +119,7 @@ router.get('/markers', async (req, res) => {
       if (to) filter.date.$lte = to;
     }
 
-    const entries = await Entry.find(filter).select('date favorite photoIds mood').lean();
+    const entries = await Entry.find(filter).select('date favorite photoIds mood legendId').lean();
     const markers = {};
     for (const e of entries) {
       markers[e.date] = {
@@ -125,6 +127,7 @@ router.get('/markers', async (req, res) => {
         photoCount: (e.photoIds || []).length,
         mood: e.mood ?? null,
         hasEntry: true,
+        legendId: e.legendId ? String(e.legendId) : '',
       };
     }
     res.json(markers);
@@ -209,7 +212,19 @@ async function upsertEntry(req, res) {
     if (req.body.tags !== undefined) update.tags = normalizeList(req.body.tags);
     if (req.body.people !== undefined) update.people = normalizeList(req.body.people);
     if (req.body.favorite !== undefined) update.favorite = !!req.body.favorite;
+    if (req.body.legendId !== undefined) {
+      update.legendId = String(req.body.legendId || '').trim().slice(0, 80);
+    }
     if (req.body.weatherNote !== undefined) update.weatherNote = String(req.body.weatherNote);
+    // Full replace of timed moments (used by data package import)
+    if (Array.isArray(req.body.logs)) {
+      update.logs = req.body.logs
+        .map((l) => ({
+          text: String(l?.text || '').trim(),
+          at: l?.at ? new Date(l.at) : new Date(),
+        }))
+        .filter((l) => l.text && !Number.isNaN(l.at.getTime()));
+    }
 
     const entry = await Entry.findOneAndUpdate(
       { date },
@@ -296,11 +311,12 @@ router.delete('/:date', async (req, res) => {
     if (!entry) return res.status(404).json({ error: 'Not found' });
 
     const bucket = getBucket();
-    for (const id of entry.photoIds || []) {
+    const mediaIds = [...(entry.photoIds || []), ...(entry.voiceIds || [])];
+    for (const id of mediaIds) {
       try {
         await bucket.delete(new mongoose.Types.ObjectId(id));
       } catch (e) {
-        console.warn('Failed to delete photo', id, e.message);
+        console.warn('Failed to delete media', id, e.message);
       }
     }
 
@@ -309,6 +325,56 @@ router.delete('/:date', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to delete entry' });
+  }
+});
+
+router.post('/:date/voices', upload.single('voice'), async (req, res) => {
+  try {
+    const { date } = req.params;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return res.status(400).json({ error: 'Invalid date' });
+    }
+    if (!req.file) return res.status(400).json({ error: 'voice file required' });
+
+    const durationMs = Math.max(0, parseInt(req.body.durationMs, 10) || 0);
+    const bucket = getBucket();
+    const contentType = req.file.mimetype || 'audio/mp4';
+    const filename = req.file.originalname || `voice-${Date.now()}.m4a`;
+
+    const uploadStream = bucket.openUploadStream(filename, {
+      contentType,
+      metadata: {
+        entryDate: date,
+        kind: 'voice',
+        durationMs,
+        createdAt: new Date(),
+      },
+    });
+
+    const voiceId = await new Promise((resolve, reject) => {
+      uploadStream.on('error', reject);
+      uploadStream.on('finish', () => resolve(String(uploadStream.id)));
+      uploadStream.end(req.file.buffer);
+    });
+
+    const entry = await Entry.findOneAndUpdate(
+      { date },
+      {
+        $setOnInsert: { date },
+        $addToSet: { voiceIds: voiceId },
+      },
+      { upsert: true, new: true }
+    );
+
+    res.status(201).json({
+      id: voiceId,
+      entryDate: date,
+      durationMs,
+      entry: serializeEntry(entry),
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Voice note upload failed' });
   }
 });
 

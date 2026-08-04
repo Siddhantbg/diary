@@ -1,30 +1,38 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { colors, fonts, spacing } from '@/constants/theme';
-import { MOOD_LABELS } from '@/lib/dates';
+import { useTheme } from '@/context/ThemeContext';
+import { fonts, spacing } from '@/constants/theme';
+import { MOOD_COLORS, MOOD_EMOJIS, MOOD_IDS, MOOD_LABELS } from '@/lib/dates';
 
 type Props = {
   value: number | null;
   onChange: (mood: number | null) => void;
 };
 
+/** Compact inline mood row (legacy; entry editor uses MoodSheet). */
 export function MoodPicker({ value, onChange }: Props) {
+  const { tokens } = useTheme();
   return (
     <View style={styles.wrap}>
-      <Text style={styles.label}>Mood</Text>
+      <Text style={[styles.label, { color: tokens.textMuted }]}>Mood</Text>
       <View style={styles.row}>
-        {[1, 2, 3, 4, 5].map((n) => {
+        {MOOD_IDS.map((n) => {
           const active = value === n;
           return (
             <Pressable
               key={n}
               onPress={() => onChange(active ? null : n)}
-              style={[styles.dot, active && styles.dotActive]}
+              style={[
+                styles.dot,
+                {
+                  backgroundColor: MOOD_COLORS[n],
+                  borderWidth: active ? 2 : 0,
+                  borderColor: tokens.white,
+                },
+              ]}
+              accessibilityLabel={MOOD_LABELS[n]}
             >
-              <Text style={[styles.num, active && styles.numActive]}>{n}</Text>
-              <Text style={[styles.caption, active && styles.captionActive]} numberOfLines={1}>
-                {MOOD_LABELS[n]}
-              </Text>
+              <Text style={styles.emoji}>{MOOD_EMOJIS[n]}</Text>
             </Pressable>
           );
         })}
@@ -40,43 +48,23 @@ const styles = StyleSheet.create({
   label: {
     fontFamily: fonts.bodyMedium,
     fontSize: 13,
-    color: colors.inkMuted,
     textTransform: 'uppercase',
     letterSpacing: 0.8,
     marginBottom: spacing.sm,
   },
   row: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 6,
+    flexWrap: 'wrap',
+    gap: 8,
   },
   dot: {
-    flex: 1,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: 'center',
-    paddingVertical: 10,
-    borderWidth: 1,
-    borderColor: colors.line,
-    backgroundColor: colors.white,
+    justifyContent: 'center',
   },
-  dotActive: {
-    borderColor: colors.leaf,
-    backgroundColor: colors.leafSoft,
-  },
-  num: {
-    fontFamily: fonts.display,
-    fontSize: 18,
-    color: colors.inkMuted,
-  },
-  numActive: {
-    color: colors.leaf,
-  },
-  caption: {
-    fontFamily: fonts.body,
-    fontSize: 10,
-    color: colors.inkMuted,
-    marginTop: 2,
-  },
-  captionActive: {
-    color: colors.ink,
+  emoji: {
+    fontSize: 20,
   },
 });

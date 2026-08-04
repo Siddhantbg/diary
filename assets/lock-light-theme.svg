@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none" aria-hidden="true">
+  <!-- Padlock  light theme (black stroke) -->
+  <g
+    fill="none"
+    stroke="#000000"
+    stroke-width="36"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  >
+    <!-- Shackle -->
+    <path d="M168 232 V176 a88 88 0 0 1 176 0 v56"/>
+    <!-- Body -->
+    <rect x="112" y="224" width="288" height="208" rx="48"/>
+    <!-- Keyhole -->
+    <circle cx="256" cy="312" r="28"/>
+    <path d="M256 340 v48"/>
+  </g>
+</svg>

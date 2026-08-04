@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none" aria-hidden="true">
+  <!-- Mine / profile silhouette  dark theme (white fill, transparent background) -->
+  <circle cx="256" cy="148" r="92" fill="#FFFFFF"/>
+  <path
+    fill="#FFFFFF"
+    d="M96 472c0-88 72-152 160-152s160 64 160 152v8H96v-8z"
+  />
+</svg>

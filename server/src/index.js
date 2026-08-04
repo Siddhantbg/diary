@@ -9,6 +9,7 @@ const { requireApiSecret } = require('./middleware/auth');
 const { resetBucket } = require('./gridfs');
 const entriesRouter = require('./routes/entries');
 const photosRouter = require('./routes/photos');
+const lockRouter = require('./routes/lock');
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -28,6 +29,7 @@ app.get('/health', (_req, res) => {
 app.use(requireApiSecret);
 app.use('/entries', entriesRouter);
 app.use('/photos', photosRouter);
+app.use('/lock', lockRouter);
 
 app.use((err, _req, res, _next) => {
   console.error(err);

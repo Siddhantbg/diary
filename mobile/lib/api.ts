@@ -14,7 +14,10 @@ export type DiaryEntry = {
   tags: string[];
   people: string[];
   favorite: boolean;
+  /** Custom calendar legend id (user-defined). */
+  legendId: string;
   photoIds: string[];
+  voiceIds: string[];
   weatherNote: string;
   createdAt?: string;
   updatedAt?: string;
@@ -25,6 +28,7 @@ export type DayMarker = {
   photoCount: number;
   mood: number | null;
   hasEntry: boolean;
+  legendId?: string;
 };
 
 export type Stats = {
@@ -51,6 +55,30 @@ export class ApiError extends Error {
   }
 }
 
+/** User-facing copy for network / Render cold starts */
+export function friendlyApiMessage(err: unknown): string {
+  if (err instanceof ApiError) {
+    if (err.status === 0) {
+      return (
+        err.message ||
+        'Cannot reach the diary server. If you use Render free tier, the first open can take up to a minute while it wakes up.'
+      );
+    }
+    if (err.status === 401 || err.status === 403) {
+      return 'Server rejected this request. Check the wired API secret.';
+    }
+    if (err.status >= 500) {
+      return 'Server error. Please try again in a moment.';
+    }
+    return err.message;
+  }
+  if (err instanceof TypeError || (err instanceof Error && /network|fetch|failed/i.test(err.message))) {
+    return 'Network issue or free server waking up. Wait ~30–60s and try again.';
+  }
+  if (err instanceof Error) return err.message;
+  return 'Something went wrong';
+}
+
 export function createApi(apiUrl: string, apiSecret: string) {
   const base = apiUrl.replace(/\/$/, '');
 
@@ -70,12 +98,19 @@ export function createApi(apiUrl: string, apiSecret: string) {
       body = JSON.stringify(options.body);
     }
 
-    const res = await fetch(`${base}${path}`, {
-      method: options.method || 'GET',
-      headers,
-      body,
-      signal: options.signal,
-    });
+    let res: Response;
+    try {
+      res = await fetch(`${base}${path}`, {
+        method: options.method || 'GET',
+        headers,
+        body,
+        signal: options.signal,
+      });
+    } catch (e: unknown) {
+      const tip =
+        'Cannot reach diary API (often a free Render cold start — wait ~1 min and retry).';
+      throw new ApiError(0, e instanceof Error && e.name === 'AbortError' ? 'Request cancelled' : tip);
+    }
 
     if (!res.ok) {
       let message = `Request failed (${res.status})`;
@@ -94,7 +129,8 @@ export function createApi(apiUrl: string, apiSecret: string) {
 
   return {
     health: () => fetch(`${base}/health`).then((r) => r.json()),
-    listEntries: (limit = 30) => request<DiaryEntry[]>(`/entries?limit=${limit}`),
+    listEntries: (limit = 30, skip = 0) =>
+      request<DiaryEntry[]>(`/entries?limit=${limit}&skip=${skip}`),
     listFavorites: () => request<DiaryEntry[]>('/entries?favorites=1&limit=50'),
     getEntry: (date: string) => request<DiaryEntry>(`/entries/${date}`),
     saveEntry: (date: string, payload: Partial<DiaryEntry>) =>
@@ -135,9 +171,69 @@ export function createApi(apiUrl: string, apiSecret: string) {
         formData: form,
       });
     },
+    uploadVoice: (date: string, uri: string, durationMs = 0) => {
+      const form = new FormData();
+      const raw = uri.split('/').pop() || `voice-${Date.now()}.m4a`;
+      const name = raw.includes('.') ? raw : `${raw}.m4a`;
+      form.append('voice', {
+        uri,
+        name,
+        type: 'audio/mp4',
+      } as unknown as Blob);
+      form.append('durationMs', String(Math.round(durationMs)));
+      return request<{ id: string; durationMs: number; entry: DiaryEntry }>(
+        `/entries/${date}/voices`,
+        {
+          method: 'POST',
+          formData: form,
+        }
+      );
+    },
     deletePhoto: (id: string) => request<{ ok: boolean }>(`/photos/${id}`, { method: 'DELETE' }),
+    deleteVoice: (id: string) => request<{ ok: boolean }>(`/photos/${id}`, { method: 'DELETE' }),
     photoUrl: (id: string) => `${base}/photos/${id}`,
+    voiceUrl: (id: string) => `${base}/photos/${id}`,
+
+    /** Diary lock (server mirror for recovery) */
+    getLock: () => request<LockRemoteSettings>('/lock'),
+    enableLock: (body: {
+      pin: string;
+      securityQuestion?: string;
+      securityAnswer?: string;
+      recoveryEmail?: string;
+      fingerprintEnabled?: boolean;
+    }) => request<LockRemoteSettings>('/lock', { method: 'PUT', body }),
+    updateLock: (body: {
+      currentPin?: string;
+      pin?: string;
+      securityQuestion?: string;
+      securityAnswer?: string;
+      recoveryEmail?: string;
+      fingerprintEnabled?: boolean;
+      lockEnabled?: boolean;
+    }) => request<LockRemoteSettings>('/lock', { method: 'PATCH', body }),
+    verifyLockPin: (pin: string) =>
+      request<{ ok: boolean; lockEnabled: boolean }>('/lock/verify', {
+        method: 'POST',
+        body: { pin },
+      }),
+    recoverLock: (answer: string, newPin: string) =>
+      request<{ ok: boolean } & LockRemoteSettings>('/lock/recover', {
+        method: 'POST',
+        body: { answer, newPin },
+      }),
   };
 }
+
+export type LockRemoteSettings = {
+  lockEnabled: boolean;
+  hasPin: boolean;
+  hasSecurityQuestion: boolean;
+  securityQuestion: string;
+  hasEmail: boolean;
+  recoveryEmailMasked: string;
+  fingerprintEnabled: boolean;
+  updatedAt?: string;
+};
 
 export type DiaryApi = ReturnType<typeof createApi>;

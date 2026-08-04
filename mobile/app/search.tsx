@@ -8,12 +8,14 @@ import {
   View,
 } from 'react-native';
 import { useSettings } from '@/context/SettingsContext';
-import { DiaryEntry } from '@/lib/api';
+import { useTheme } from '@/context/ThemeContext';
+import { DiaryEntry, friendlyApiMessage } from '@/lib/api';
 import { EntryCard } from '@/components/EntryCard';
-import { colors, fonts, spacing } from '@/constants/theme';
+import { fonts, spacing } from '@/constants/theme';
 
 export default function SearchScreen() {
   const { api } = useSettings();
+  const { tokens } = useTheme();
   const [q, setQ] = useState('');
   const [results, setResults] = useState<DiaryEntry[]>([]);
   const [favorites, setFavorites] = useState<DiaryEntry[]>([]);
@@ -42,7 +44,7 @@ export default function SearchScreen() {
         const data = await api.search(term);
         setResults(data);
       } catch (e: unknown) {
-        setError(e instanceof Error ? e.message : 'Search failed');
+        setError(friendlyApiMessage(e));
       } finally {
         setLoading(false);
       }
@@ -52,17 +54,23 @@ export default function SearchScreen() {
   }, [q, api]);
 
   return (
-    <View style={styles.screen}>
+    <View style={[styles.screen, { backgroundColor: tokens.bg }]}>
       <TextInput
-        style={styles.input}
+        style={[
+          styles.input,
+          { color: tokens.text, borderBottomColor: tokens.accent },
+        ]}
         placeholder="Search titles, people, tags, words…"
-        placeholderTextColor={colors.inkMuted}
+        placeholderTextColor={tokens.textMuted}
         value={q}
         onChangeText={setQ}
         autoCorrect={false}
+        autoFocus
       />
-      {loading ? <ActivityIndicator color={colors.leaf} style={{ marginVertical: 12 }} /> : null}
-      {!!error && <Text style={styles.error}>{error}</Text>}
+      {loading ? (
+        <ActivityIndicator color={tokens.accent} style={{ marginVertical: 12 }} />
+      ) : null}
+      {!!error && <Text style={{ color: tokens.danger, marginBottom: 8 }}>{error}</Text>}
 
       {q.trim() ? (
         <FlatList
@@ -71,7 +79,9 @@ export default function SearchScreen() {
           renderItem={({ item }) => <EntryCard entry={item} />}
           contentContainerStyle={styles.list}
           ListEmptyComponent={
-            !loading ? <Text style={styles.muted}>No matching memories.</Text> : null
+            !loading ? (
+              <Text style={{ color: tokens.textMuted }}>No matching memories.</Text>
+            ) : null
           }
         />
       ) : (
@@ -82,11 +92,15 @@ export default function SearchScreen() {
           contentContainerStyle={styles.list}
           ListHeaderComponent={
             <View style={{ marginBottom: spacing.sm }}>
-              <Text style={styles.section}>Cherished days</Text>
-              <Text style={styles.muted}>Favorites appear here when you are not searching.</Text>
+              <Text style={[styles.section, { color: tokens.text }]}>Cherished days</Text>
+              <Text style={{ color: tokens.textMuted, fontFamily: fonts.body }}>
+                Favorites appear here when you are not searching.
+              </Text>
             </View>
           }
-          ListEmptyComponent={<Text style={styles.muted}>Star a day to keep it close.</Text>}
+          ListEmptyComponent={
+            <Text style={{ color: tokens.textMuted }}>Star a day to keep it close.</Text>
+          }
         />
       )}
     </View>
@@ -96,16 +110,13 @@ export default function SearchScreen() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: colors.paper,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
   },
   input: {
     fontFamily: fonts.body,
     fontSize: 17,
-    color: colors.ink,
     borderBottomWidth: 1.5,
-    borderBottomColor: colors.leaf,
     paddingVertical: 10,
     marginBottom: spacing.md,
   },
@@ -113,16 +124,5 @@ const styles = StyleSheet.create({
   section: {
     fontFamily: fonts.display,
     fontSize: 22,
-    color: colors.ink,
-  },
-  muted: {
-    fontFamily: fonts.body,
-    color: colors.inkMuted,
-    marginTop: 6,
-  },
-  error: {
-    fontFamily: fonts.body,
-    color: colors.danger,
-    marginBottom: 8,
   },
 });

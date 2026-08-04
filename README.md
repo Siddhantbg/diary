@@ -119,4 +119,4 @@ Before building, set your Render API URL as a default if you want (`EXPO_PUBLIC_
 
 ## Design notes
 
-Warm ink-on-paper journal UI (Literata + Source Sans 3, leaf green accents). Not a dashboard — Home leads with brand + write-today, then memories.
+Warm ink-on-paper journal UI (Montserrat + Poppins, leaf green accents). Not a dashboard — Home leads with brand + write-today, then memories.

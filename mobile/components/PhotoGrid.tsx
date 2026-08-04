@@ -3,7 +3,9 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 import { Image } from 'expo-image';
 import { Link } from 'expo-router';
 import { useSettings } from '@/context/SettingsContext';
-import { colors, fonts, spacing } from '@/constants/theme';
+import { useTheme } from '@/context/ThemeContext';
+import { fonts, radius, spacing } from '@/constants/theme';
+import { GalleryIcon } from '@/components/icons/GalleryIcon';
 
 type Props = {
   photoIds: string[];
@@ -14,22 +16,36 @@ type Props = {
 
 export function PhotoGrid({ photoIds, onAdd, onDelete, uploading }: Props) {
   const { api, config } = useSettings();
+  const { tokens, isDark } = useTheme();
 
   return (
     <View style={styles.wrap}>
       <View style={styles.header}>
-        <Text style={styles.label}>Photos</Text>
-        <Pressable onPress={onAdd} style={styles.addBtn} disabled={uploading}>
-          <Text style={styles.addText}>{uploading ? 'Uploading…' : '+ Add'}</Text>
+        <View style={styles.labelRow}>
+          <GalleryIcon
+            color={tokens.textMuted}
+            variant={isDark ? 'dark' : 'light'}
+            size={16}
+          />
+          <Text style={[styles.label, { color: tokens.textMuted }]}>Photos</Text>
+        </View>
+        <Pressable
+          onPress={onAdd}
+          style={[styles.addBtn, { backgroundColor: tokens.accent }]}
+          disabled={uploading}
+          accessibilityLabel={uploading ? 'Uploading photo' : 'Add photo'}
+        >
+          <GalleryIcon color="#FFFFFF" size={14} />
+          <Text style={styles.addText}>{uploading ? 'Uploading…' : 'Add'}</Text>
         </Pressable>
       </View>
       <View style={styles.grid}>
         {photoIds.map((id) => {
           const uri = api.photoUrl(id);
           return (
-            <View key={id} style={styles.cell}>
+            <View key={id} style={[styles.cell, { backgroundColor: tokens.bgElevated }]}>
               <Link href={`/photo/${id}`} asChild>
-                <Pressable>
+                <Pressable style={{ flex: 1 }}>
                   <Image
                     source={{
                       uri,
@@ -37,6 +53,7 @@ export function PhotoGrid({ photoIds, onAdd, onDelete, uploading }: Props) {
                     }}
                     style={styles.image}
                     contentFit="cover"
+                    transition={120}
                   />
                 </Pressable>
               </Link>
@@ -49,12 +66,20 @@ export function PhotoGrid({ photoIds, onAdd, onDelete, uploading }: Props) {
           );
         })}
         {uploading ? (
-          <View style={[styles.cell, styles.placeholder]}>
-            <ActivityIndicator color={colors.leaf} />
+          <View
+            style={[
+              styles.cell,
+              styles.placeholder,
+              { backgroundColor: tokens.bgElevated },
+            ]}
+          >
+            <ActivityIndicator color={tokens.accent} />
           </View>
         ) : null}
         {!photoIds.length && !uploading ? (
-          <Text style={styles.empty}>No photos yet — capture this day.</Text>
+          <Text style={[styles.empty, { color: tokens.textMuted }]}>
+            No photos yet — capture this day.
+          </Text>
         ) : null}
       </View>
     </View>
@@ -71,20 +96,27 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: spacing.sm,
   },
+  labelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
   label: {
     fontFamily: fonts.bodyMedium,
     fontSize: 13,
-    color: colors.inkMuted,
     textTransform: 'uppercase',
     letterSpacing: 0.8,
   },
   addBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     paddingHorizontal: 12,
     paddingVertical: 6,
-    backgroundColor: colors.leaf,
+    borderRadius: radius.sm,
   },
   addText: {
-    color: colors.white,
+    color: '#FFFFFF',
     fontFamily: fonts.bodyMedium,
     fontSize: 13,
   },
@@ -97,7 +129,8 @@ const styles = StyleSheet.create({
     width: '31%',
     aspectRatio: 1,
     position: 'relative',
-    backgroundColor: colors.paperDeep,
+    borderRadius: radius.sm,
+    overflow: 'hidden',
   },
   image: {
     width: '100%',
@@ -110,12 +143,12 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: 'rgba(28,43,36,0.75)',
+    backgroundColor: 'rgba(0,0,0,0.65)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   deleteText: {
-    color: colors.white,
+    color: '#FFFFFF',
     fontSize: 16,
     lineHeight: 18,
   },
@@ -125,7 +158,6 @@ const styles = StyleSheet.create({
   },
   empty: {
     fontFamily: fonts.body,
-    color: colors.inkMuted,
     fontSize: 14,
     paddingVertical: spacing.sm,
   },

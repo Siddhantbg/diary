@@ -19,11 +19,14 @@ const entrySchema = new mongoose.Schema(
     title: { type: String, default: '' },
     body: { type: String, default: '' },
     logs: { type: [logSchema], default: [] },
-    mood: { type: Number, min: 1, max: 5, default: null },
+    mood: { type: Number, min: 1, max: 10, default: null },
     tags: { type: [String], default: [] },
     people: { type: [String], default: [] },
     favorite: { type: Boolean, default: false },
+    /** Custom calendar legend id from the app catalog (not Entry/Cherished system keys). */
+    legendId: { type: String, default: '' },
     photoIds: { type: [String], default: [] },
+    voiceIds: { type: [String], default: [] },
     weatherNote: { type: String, default: '' },
   },
   { timestamps: true }

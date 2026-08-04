@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none" aria-hidden="true">
+  <!-- Light theme: black outline, hollow capsule (background shows through). -->
+  <g
+    fill="none"
+    stroke="#000000"
+    stroke-width="40"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  >
+    <rect x="188" y="56" width="136" height="248" rx="68"/>
+    <path d="M120 196v36c0 75 60.5 136 136 136s136-61 136-136v-36"/>
+    <path d="M256 368v56"/>
+    <path d="M168 456h176"/>
+  </g>
+</svg>

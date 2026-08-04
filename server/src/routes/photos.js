@@ -77,7 +77,9 @@ router.delete('/:id', async (req, res) => {
       }
     }
 
-    await Entry.updateMany({ photoIds: String(id) }, { $pull: { photoIds: String(id) } });
+    const sid = String(id);
+    await Entry.updateMany({ photoIds: sid }, { $pull: { photoIds: sid } });
+    await Entry.updateMany({ voiceIds: sid }, { $pull: { voiceIds: sid } });
     res.json({ ok: true });
   } catch (err) {
     console.error(err);

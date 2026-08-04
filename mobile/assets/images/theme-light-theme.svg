@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none" aria-hidden="true">
+  <!-- Paint palette — Theme. Light theme (black). Wells + thumb hole via evenodd. -->
+  <path
+    fill="#000000"
+    fill-rule="evenodd"
+    clip-rule="evenodd"
+    d="
+      M 268 48
+      C 148 48 64 140 64 256
+      C 64 348 124 420 208 440
+      C 236 448 252 428 248 404
+      C 242 372 260 348 296 348
+      C 360 348 412 388 436 348
+      C 460 308 464 268 464 220
+      C 464 116 388 48 268 48
+      Z
+
+      M 156 176
+      A 28 28 0 1 1 156.01 176
+      Z
+
+      M 236 124
+      A 34 34 0 1 1 236.01 124
+      Z
+
+      M 328 140
+      A 36 36 0 1 1 328.01 140
+      Z
+
+      M 388 216
+      A 30 30 0 1 1 388.01 216
+      Z
+
+      M 220 408
+      A 44 44 0 1 1 220.01 408
+      Z
+    "
+  />
+</svg>

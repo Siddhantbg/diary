@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none" aria-hidden="true">
+  <!-- Tag icon  dark theme (white stroke). Tilted label with eyelet. -->
+  <g
+    transform="rotate(-40 256 256)"
+    fill="none"
+    stroke="#FFFFFF"
+    stroke-width="36"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  >
+    <path
+      d="M148 176
+         H348
+         a48 48 0 0 1 48 48
+         v64
+         a48 48 0 0 1 -48 48
+         H196
+         L108 256
+         Z"
+    />
+    <circle cx="168" cy="256" r="28"/>
+  </g>
+</svg>

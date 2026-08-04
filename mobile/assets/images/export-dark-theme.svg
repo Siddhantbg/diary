@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none" aria-hidden="true">
+  <!-- Export & Import — solid tray/box with share-export arrow cut out. Dark theme (white). -->
+  <defs>
+    <mask id="exportArrow">
+      <rect width="512" height="512" fill="#FFFFFF"/>
+      <!-- Lid notch -->
+      <rect x="72" y="176" width="368" height="28" rx="4" fill="#000000"/>
+      <!-- Curved export arrow (stem + head) -->
+      <path
+        fill="none"
+        stroke="#000000"
+        stroke-width="36"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        d="M168 388 C176 300 236 248 320 232"
+      />
+      <path fill="#000000" d="M292 188 L360 228 L288 268 L308 228 Z"/>
+    </mask>
+  </defs>
+  <path
+    fill="#FFFFFF"
+    mask="url(#exportArrow)"
+    d="
+      M 96 120
+      H 416
+      A 40 40 0 0 1 456 160
+      V 408
+      A 40 40 0 0 1 416 448
+      H 96
+      A 40 40 0 0 1 56 408
+      V 160
+      A 40 40 0 0 1 96 120
+      Z
+    "
+  />
+</svg>
