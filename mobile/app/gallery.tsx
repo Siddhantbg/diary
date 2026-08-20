@@ -85,7 +85,7 @@ export default function GalleryScreen() {
             title="No photos yet"
             subtitle="Add photos from a day editor — they appear here and on the calendar."
             actionLabel="Write today"
-            onAction={() => router.push(`/day/${toDateKey()}`)}
+            onAction={() => router.push(`/day/${toDateKey()}?mode=edit`)}
           />
         </View>
       ) : (

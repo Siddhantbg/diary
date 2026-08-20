@@ -13,6 +13,7 @@ import {
   verifyPin,
   verifySecurityAnswer,
 } from '@/lib/config';
+import { warmDiaryApi } from '@/lib/apiWarmup';
 
 type SettingsContextValue = {
   ready: boolean;
@@ -67,6 +68,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     refreshConfig();
+    void warmDiaryApi();
   }, [refreshConfig]);
 
   const api = useMemo(

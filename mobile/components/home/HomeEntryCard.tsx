@@ -1,16 +1,28 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { Link } from 'expo-router';
+import { Image } from 'expo-image';
+import { useRouter } from 'expo-router';
+import { useSettings } from '@/context/SettingsContext';
 import { useTheme } from '@/context/ThemeContext';
-import { MOOD_EMOJIS, parseDateKey } from '@/lib/dates';
-import { fonts, radius, spacing } from '@/constants/theme';
+import { parseDateKey } from '@/lib/dates';
+import { fonts, radius } from '@/constants/theme';
 import { DraftIcon } from '@/components/icons/DraftIcon';
+import { GemIcon } from '@/components/gems/GemIcon';
+import { MoodFace } from '@/components/mood/MoodFace';
+import { cherishedGemId, loadLegends } from '@/lib/legends';
+import { DEFAULT_CHERISHED_GEM } from '@/lib/gems';
 
 export type HomeListItem = {
   date: string;
   mood: number | null;
   isDraft: boolean;
   isFavorite?: boolean;
+  gemId?: string | null;
+  /** Day title */
+  title?: string;
+  /** First lines of the day’s writing */
+  preview?: string;
+  photoIds?: string[];
   /** Soft status under month when not a pure draft */
   statusLabel?: string;
 };
@@ -19,16 +31,28 @@ type Props = {
   item: HomeListItem;
 };
 
+const PREVIEW_PHOTOS = 2;
+
 /**
- * Minimal home row: large day · month + draft/status · mood
- * Matches reference list cards.
+ * One home card: date / month / mood, glimpse text, and photos in the same box.
  */
 export function HomeEntryCard({ item }: Props) {
+  const router = useRouter();
   const { tokens, isDark } = useTheme();
+  const { api, config } = useSettings();
   const d = parseDateKey(item.date);
   const dayNum = String(d.getDate()).padStart(2, '0');
   const month = d.toLocaleDateString('en-US', { month: 'short' });
-  const moodFace = item.mood ? MOOD_EMOJIS[item.mood] : '😐';
+  const [cherishGem, setCherishGem] = useState(DEFAULT_CHERISHED_GEM);
+  const [cherishColor, setCherishColor] = useState('#FFC857');
+
+  useEffect(() => {
+    void loadLegends().then((list) => {
+      setCherishGem(cherishedGemId(list));
+      const c = list.find((l) => l.system === 'cherished')?.color;
+      if (c) setCherishColor(c);
+    });
+  }, []);
 
   const status = item.isDraft
     ? 'Draft'
@@ -38,109 +62,217 @@ export function HomeEntryCard({ item }: Props) {
         ? 'Cherished'
         : '';
 
+  const title = (item.title || '').trim();
+  const preview = (item.preview || '').trim();
+  const photos = (item.photoIds || []).filter(Boolean);
+  const shownPhotos = photos.slice(0, PREVIEW_PHOTOS);
+  const extraPhotos = Math.max(0, photos.length - shownPhotos.length);
+  const href = item.isDraft ? `/day/${item.date}?mode=edit` : `/day/${item.date}`;
+
   return (
-    <Link href={`/day/${item.date}`} asChild>
-      <Pressable
-        style={[
-          styles.card,
-          {
-            backgroundColor: tokens.bgCard,
-            borderColor: tokens.line,
-          },
-        ]}
-        accessibilityRole="button"
-        accessibilityLabel={`${month} ${dayNum}${status ? `, ${status}` : ''}`}
-      >
-        <Text style={[styles.day, { color: tokens.text }]}>{dayNum}</Text>
-        <View style={styles.mid}>
-          <View style={styles.midTop}>
-            <Text style={[styles.month, { color: tokens.textMuted }]}>{month}</Text>
-            {status ? (
-              <View style={styles.statusRow}>
-                {item.isDraft ? (
-                  <DraftIcon
-                    variant={isDark ? 'dark' : 'light'}
-                    color={tokens.textMuted}
-                    fillColor={isDark ? 'rgba(197, 228, 245, 0.25)' : '#E1F5FE'}
-                    size={16}
-                  />
-                ) : (
-                  <Text style={[styles.statusIcon, { color: tokens.textSubtle }]}>▣</Text>
-                )}
-                <Text style={[styles.status, { color: tokens.textMuted }]}>{status}</Text>
-              </View>
-            ) : null}
+    <Pressable
+      onPress={() => router.push(href)}
+      style={[
+        styles.card,
+        {
+          backgroundColor: tokens.bgElevated,
+          borderColor: tokens.line,
+        },
+      ]}
+      accessibilityRole="button"
+      accessibilityLabel={`${month} ${dayNum}${status ? `, ${status}` : ''}`}
+    >
+      <View style={styles.row}>
+        <View style={styles.rail}>
+          <Text style={[styles.day, { color: tokens.text }]}>{dayNum}</Text>
+          <Text style={[styles.month, { color: tokens.textMuted }]}>{month}</Text>
+          <View style={styles.mood}>
+            <MoodFace mood={item.mood} size={36} />
           </View>
+          {status ? (
+            <View style={styles.statusRow}>
+              {item.isDraft ? (
+                <DraftIcon
+                  variant={isDark ? 'dark' : 'light'}
+                  color={tokens.textMuted}
+                  fillColor={isDark ? 'rgba(197, 228, 245, 0.25)' : '#E1F5FE'}
+                  size={14}
+                />
+              ) : item.isFavorite ? (
+                <GemIcon gemId={item.gemId || cherishGem} size={14} />
+              ) : (
+                <Text style={[styles.statusIcon, { color: tokens.textSubtle }]}>▣</Text>
+              )}
+              <Text
+                style={[
+                  styles.status,
+                  {
+                    color: item.isFavorite && !item.isDraft ? cherishColor : tokens.textMuted,
+                  },
+                ]}
+                numberOfLines={1}
+              >
+                {status}
+              </Text>
+            </View>
+          ) : null}
         </View>
-        <View
-          style={[
-            styles.mood,
-            {
-              backgroundColor: item.mood
-                ? 'rgba(255, 200, 80, 0.18)'
-                : 'rgba(255,255,255,0.06)',
-            },
-          ]}
-        >
-          <Text style={styles.moodFace}>{moodFace}</Text>
+
+        <View style={styles.body}>
+          {title ? (
+            <Text
+              style={[styles.glimpseTitle, { color: tokens.text }]}
+              numberOfLines={1}
+              ellipsizeMode="tail"
+            >
+              {title}
+            </Text>
+          ) : null}
+          {preview ? (
+            <Text
+              style={[styles.glimpseText, { color: tokens.textMuted }]}
+              numberOfLines={title ? 3 : 4}
+              ellipsizeMode="tail"
+            >
+              {preview}
+            </Text>
+          ) : !title ? (
+            <Text style={[styles.glimpseText, { color: tokens.textSubtle }]} numberOfLines={2}>
+              Tap to open this day
+            </Text>
+          ) : null}
         </View>
-      </Pressable>
-    </Link>
+
+        {shownPhotos.length > 0 ? (
+          <View style={styles.photoRow}>
+            {shownPhotos.map((id, i) => (
+              <View
+                key={id}
+                style={[
+                  styles.photoWrap,
+                  { backgroundColor: tokens.bgCard, borderColor: tokens.line },
+                ]}
+              >
+                <Image
+                  source={{
+                    uri: api.photoUrl(id),
+                    headers: { 'x-api-secret': config.apiSecret },
+                  }}
+                  style={styles.photo}
+                  contentFit="cover"
+                  transition={120}
+                />
+                {i === shownPhotos.length - 1 && extraPhotos > 0 ? (
+                  <View style={styles.moreOverlay}>
+                    <Text style={styles.moreText}>+{extraPhotos}</Text>
+                  </View>
+                ) : null}
+              </View>
+            ))}
+          </View>
+        ) : null}
+      </View>
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    width: '100%',
+    alignSelf: 'stretch',
     borderRadius: radius.lg,
     borderWidth: StyleSheet.hairlineWidth,
-    paddingVertical: 14,
-    paddingHorizontal: spacing.md,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
     marginBottom: 10,
-    minHeight: 72,
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: '100%',
+  },
+  rail: {
+    width: 52,
+    flexGrow: 0,
+    flexShrink: 0,
+    alignItems: 'center',
   },
   day: {
     fontFamily: fonts.display,
-    fontSize: 34,
-    lineHeight: 40,
-    minWidth: 52,
+    fontSize: 26,
+    lineHeight: 30,
     letterSpacing: -0.5,
-  },
-  mid: {
-    flex: 1,
-    paddingHorizontal: 4,
-  },
-  midTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: 10,
   },
   month: {
     fontFamily: fonts.body,
-    fontSize: 15,
+    fontSize: 12,
+    marginBottom: 4,
+  },
+  mood: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   statusRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 3,
+    marginTop: 4,
+    maxWidth: 52,
   },
   statusIcon: {
-    fontSize: 12,
+    fontSize: 11,
   },
   status: {
     fontFamily: fonts.body,
-    fontSize: 14,
+    fontSize: 10,
+    flexShrink: 1,
   },
-  mood: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+  body: {
+    flex: 1,
+    minWidth: 80,
+    paddingHorizontal: 10,
+  },
+  glimpseTitle: {
+    fontFamily: fonts.display,
+    fontSize: 14,
+    letterSpacing: -0.2,
+    marginBottom: 3,
+  },
+  glimpseText: {
+    fontFamily: fonts.body,
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  photoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    flexGrow: 0,
+    flexShrink: 0,
+  },
+  photoWrap: {
+    width: 52,
+    height: 52,
+    borderRadius: 8,
+    overflow: 'hidden',
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  photo: {
+    width: 52,
+    height: 52,
+  },
+  moreOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.45)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  moodFace: {
-    fontSize: 22,
+  moreText: {
+    color: '#FFFFFF',
+    fontFamily: fonts.bodyMedium,
+    fontSize: 12,
   },
 });

@@ -25,6 +25,8 @@ const entrySchema = new mongoose.Schema(
     favorite: { type: Boolean, default: false },
     /** Custom calendar legend id from the app catalog (not Entry/Cherished system keys). */
     legendId: { type: String, default: '' },
+    /** Per-day gem when cherished (gem catalog id, e.g. gem-04). */
+    gemId: { type: String, default: '' },
     photoIds: { type: [String], default: [] },
     voiceIds: { type: [String], default: [] },
     weatherNote: { type: String, default: '' },

@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -13,10 +13,10 @@ import { useSettings } from '@/context/SettingsContext';
 import { useTheme } from '@/context/ThemeContext';
 import { DayMarker, DiaryEntry, Stats } from '@/lib/api';
 import { fonts, radius, spacing } from '@/constants/theme';
-import { MOOD_COLORS, MOOD_EMOJIS, MOOD_IDS, shiftDateKey, toDateKey } from '@/lib/dates';
+import { MOOD_COLORS, MOOD_IDS, shiftDateKey, toDateKey } from '@/lib/dates';
+import { MoodFace } from '@/components/mood/MoodFace';
 import {
   computeMoodInsights,
-  moodEmoji,
   moodLabel,
   type MoodSample,
 } from '@/lib/moodInsights';
@@ -25,6 +25,18 @@ import { ActionSheet, SheetAction } from '@/components/ui/ActionSheet';
 import { TemplatesPromptCard } from '@/components/mine/TemplatesPromptCard';
 import { BestVersionCard } from '@/components/mine/BestVersionCard';
 import { GalleryIcon } from '@/components/icons/GalleryIcon';
+import { GemIcon } from '@/components/gems/GemIcon';
+import {
+  readCachedEntries,
+  readCachedMarkers,
+  readCachedMoodSamples,
+  readCachedStats,
+  writeCachedEntries,
+  writeCachedMarkers,
+  writeCachedMoodSamples,
+  writeCachedStats,
+} from '@/lib/entryCache';
+import { warmDiaryApi } from '@/lib/apiWarmup';
 
 const QUOTES = [
   'Each day provides its own gifts.',
@@ -78,37 +90,83 @@ export default function MineScreen() {
     return `${a.dayNum}/${a.key.slice(5, 7)} – ${b.dayNum}/${b.key.slice(5, 7)}`;
   }, [weekDays]);
 
-  const load = useCallback(async () => {
-    setError('');
-    try {
+  const load = useCallback(
+    async (opts?: { soft?: boolean }) => {
+      setError('');
+      setStats((prev) => {
+        if (!opts?.soft && !prev) setLoading(true);
+        return prev;
+      });
+      void warmDiaryApi();
+      try {
+        const from = weekDays[0].key;
+        const to = weekDays[6].key;
+        const [st, markers, entries] = await Promise.all([
+          api.stats(),
+          api.markers(from, to),
+          api.listEntries(80),
+        ]);
+        setStats(st);
+        setWeekMarkers(markers);
+        void writeCachedStats(st);
+        void writeCachedMarkers(from, to, markers);
+        void writeCachedEntries(entries);
+
+        const samples: MoodSample[] = [];
+        for (const e of entries as DiaryEntry[]) {
+          if (e.mood && e.mood >= 1 && e.mood <= 10 && e.date) {
+            samples.push({ date: e.date, mood: e.mood });
+          }
+        }
+        setMoodSamples(samples);
+        void writeCachedMoodSamples(samples);
+      } catch (e: unknown) {
+        setStats((prev) => {
+          if (!prev) setError(e instanceof Error ? e.message : 'Failed to load');
+          return prev;
+        });
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    },
+    [api, weekDays]
+  );
+
+  // Paint from cache before network
+  useEffect(() => {
+    void (async () => {
       const from = weekDays[0].key;
       const to = weekDays[6].key;
-      const [st, markers, entries] = await Promise.all([
-        api.stats(),
-        api.markers(from, to),
-        api.listEntries(80),
+      const [st, markers, samples] = await Promise.all([
+        readCachedStats(),
+        readCachedMarkers(from, to),
+        readCachedMoodSamples(),
       ]);
-      setStats(st);
-      setWeekMarkers(markers);
-
-      const samples: MoodSample[] = [];
-      for (const e of entries as DiaryEntry[]) {
-        if (e.mood && e.mood >= 1 && e.mood <= 10 && e.date) {
-          samples.push({ date: e.date, mood: e.mood });
+      if (st) {
+        setStats(st);
+        setLoading(false);
+      }
+      if (markers) setWeekMarkers(markers);
+      if (samples?.length) setMoodSamples(samples);
+      else {
+        const entries = await readCachedEntries();
+        if (entries?.length) {
+          const next: MoodSample[] = [];
+          for (const e of entries) {
+            if (e.mood && e.mood >= 1 && e.mood <= 10 && e.date) {
+              next.push({ date: e.date, mood: e.mood });
+            }
+          }
+          if (next.length) setMoodSamples(next);
         }
       }
-      setMoodSamples(samples);
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Failed to load');
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [api, weekDays]);
+    })();
+  }, [weekDays]);
 
   useFocusEffect(
     useCallback(() => {
-      load();
+      void load({ soft: true });
     }, [load])
   );
 
@@ -176,7 +234,7 @@ export default function MineScreen() {
           refreshing={refreshing}
           onRefresh={() => {
             setRefreshing(true);
-            load();
+            void load({ soft: true });
           }}
           tintColor={tokens.accent}
         />
@@ -185,7 +243,7 @@ export default function MineScreen() {
       {/* Sign-in stub */}
       <View style={styles.profileRow}>
         <View style={[styles.avatar, { backgroundColor: tokens.bgElevated, borderColor: tokens.line }]}>
-          <Text style={{ fontSize: 28, color: tokens.textMuted }}>☺</Text>
+          <GemIcon gemId="gem-06" size={34} />
           <View style={[styles.avatarPlus, { backgroundColor: tokens.accent }]}>
             <Text style={{ color: '#fff', fontSize: 11, fontFamily: fonts.bodyMedium }}>+</Text>
           </View>
@@ -214,7 +272,7 @@ export default function MineScreen() {
         </Text>
         <PrimaryChip
           label="Write diary now"
-          onPress={() => router.push(`/day/${today}`)}
+          onPress={() => router.push(`/day/${today}?mode=edit`)}
           color={tokens.accent}
         />
       </View>
@@ -248,7 +306,7 @@ export default function MineScreen() {
       </View>
 
       {/* Prompt card — templates CTA */}
-      <TemplatesPromptCard onStart={() => router.push(`/day/${today}`)} />
+      <TemplatesPromptCard onStart={() => router.push(`/day/${today}?mode=edit`)} />
 
       {/* Best version promo */}
       <BestVersionCard
@@ -408,9 +466,7 @@ export default function MineScreen() {
               </Text>
               {moodInsights.bestWeekday ? (
                 <View style={styles.bestDayInner}>
-                  <Text style={{ fontSize: 28 }}>
-                    {moodEmoji(moodInsights.bestWeekday.topMood)}
-                  </Text>
+                  <MoodFace mood={moodInsights.bestWeekday.topMood} size={36} />
                   <View style={{ flex: 1 }}>
                     <Text style={[styles.bestDayName, { color: tokens.text }]}>
                       {moodInsights.bestWeekday.name}
@@ -437,9 +493,7 @@ export default function MineScreen() {
                     onPress={() => router.push(`/day/${moodInsights.bestThisWeek!.date}`)}
                     style={styles.thisWeekPeakRow}
                   >
-                    <Text style={{ fontSize: 18 }}>
-                      {moodEmoji(moodInsights.bestThisWeek.mood)}
-                    </Text>
+                    <MoodFace mood={moodInsights.bestThisWeek.mood} size={22} />
                     <Text style={[styles.thisWeekPeakText, { color: tokens.text }]}>
                       {moodInsights.bestThisWeek.weekday} ·{' '}
                       {moodLabel(moodInsights.bestThisWeek.mood)}
@@ -467,18 +521,8 @@ export default function MineScreen() {
                   const h = Math.max(6, Math.round((count / moodMax) * 72));
                   return (
                     <View key={n} style={styles.moodCol}>
-                      <View
-                        style={{
-                          width: 28,
-                          height: 28,
-                          borderRadius: 14,
-                          backgroundColor: MOOD_COLORS[n],
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          marginBottom: 4,
-                        }}
-                      >
-                        <Text style={{ fontSize: 14 }}>{MOOD_EMOJIS[n]}</Text>
+                      <View style={{ marginBottom: 4 }}>
+                        <MoodFace mood={n} size={28} />
                       </View>
                       <View
                         style={[

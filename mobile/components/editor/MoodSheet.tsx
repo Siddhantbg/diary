@@ -5,12 +5,8 @@ import { useTheme } from '@/context/ThemeContext';
 import { fonts, radius, spacing } from '@/constants/theme';
 import { SheetCloseButton } from '@/components/ui/SheetClose';
 import { ActionSheet } from '@/components/ui/ActionSheet';
-import {
-  MOOD_COLORS,
-  MOOD_EMOJIS,
-  MOOD_IDS,
-  MOOD_LABELS,
-} from '@/lib/dates';
+import { MoodFace } from '@/components/mood/MoodFace';
+import { MOOD_IDS, MOOD_LABELS } from '@/lib/dates';
 
 type Props = {
   visible: boolean;
@@ -20,8 +16,7 @@ type Props = {
 };
 
 /**
- * Popover “How's your day?” — 2×5 colorful emoji circles + caret
- * (matches mood picker design reference).
+ * Popover “How's your day?” — 2×5 glossy sticker faces.
  */
 export function MoodSheet({ visible, value, onClose, onSelect }: Props) {
   const { tokens } = useTheme();
@@ -97,7 +92,7 @@ export function MoodSheet({ visible, value, onClose, onSelect }: Props) {
       <ActionSheet
         visible={moreOpen}
         title="Mood styles"
-        message="More mood packs and custom faces are on the roadmap for a future update."
+        message="You're using the custom face pack. Extra packs can be added later."
         onClose={() => setMoreOpen(false)}
         actions={[
           { key: 'ok', label: 'Sounds good', icon: '✓', onPress: () => undefined },
@@ -121,16 +116,15 @@ function MoodDot({
       onPress={onPress}
       accessibilityLabel={MOOD_LABELS[n]}
       style={[
-        styles.emojiBtn,
+        styles.faceBtn,
         {
-          backgroundColor: MOOD_COLORS[n],
           borderWidth: active ? 2.5 : 0,
           borderColor: '#FFFFFF',
           transform: [{ scale: active ? 1.06 : 1 }],
         },
       ]}
     >
-      <Text style={styles.emoji}>{MOOD_EMOJIS[n]}</Text>
+      <MoodFace mood={n} size={52} />
     </Pressable>
   );
 }
@@ -202,14 +196,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
-  emojiBtn: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  emoji: {
-    fontSize: 26,
+  faceBtn: {
+    borderRadius: 12,
   },
 });

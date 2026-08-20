@@ -2,7 +2,8 @@ import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '@/context/ThemeContext';
 import { fonts, spacing } from '@/constants/theme';
-import { MOOD_COLORS, MOOD_EMOJIS, MOOD_IDS, MOOD_LABELS } from '@/lib/dates';
+import { MOOD_IDS, MOOD_LABELS } from '@/lib/dates';
+import { MoodFace } from '@/components/mood/MoodFace';
 
 type Props = {
   value: number | null;
@@ -25,14 +26,13 @@ export function MoodPicker({ value, onChange }: Props) {
               style={[
                 styles.dot,
                 {
-                  backgroundColor: MOOD_COLORS[n],
                   borderWidth: active ? 2 : 0,
                   borderColor: tokens.white,
                 },
               ]}
               accessibilityLabel={MOOD_LABELS[n]}
             >
-              <Text style={styles.emoji}>{MOOD_EMOJIS[n]}</Text>
+              <MoodFace mood={n} size={40} />
             </Pressable>
           );
         })}
@@ -58,13 +58,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   dot: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  emoji: {
-    fontSize: 20,
+    borderRadius: 10,
+    overflow: 'hidden',
   },
 });

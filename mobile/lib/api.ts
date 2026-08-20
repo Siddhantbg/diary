@@ -16,6 +16,8 @@ export type DiaryEntry = {
   favorite: boolean;
   /** Custom calendar legend id (user-defined). */
   legendId: string;
+  /** Per-day cherished gem id (gem catalog). */
+  gemId: string;
   photoIds: string[];
   voiceIds: string[];
   weatherNote: string;
@@ -29,6 +31,7 @@ export type DayMarker = {
   mood: number | null;
   hasEntry: boolean;
   legendId?: string;
+  gemId?: string;
 };
 
 export type Stats = {
@@ -98,14 +101,38 @@ export function createApi(apiUrl: string, apiSecret: string) {
       body = JSON.stringify(options.body);
     }
 
-    let res: Response;
+    let res: Response | undefined;
     try {
-      res = await fetch(`${base}${path}`, {
-        method: options.method || 'GET',
-        headers,
-        body,
-        signal: options.signal,
-      });
+      // Soft retries help when Render is waking (first request often fails).
+      let lastErr: unknown;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const timeout = new AbortController();
+        const timer = setTimeout(() => timeout.abort(), 45_000);
+        // Prefer caller abort; otherwise use our timeout.
+        const signal = options.signal ?? timeout.signal;
+        try {
+          res = await fetch(`${base}${path}`, {
+            method: options.method || 'GET',
+            headers,
+            body,
+            signal,
+          });
+          clearTimeout(timer);
+          lastErr = undefined;
+          break;
+        } catch (e: unknown) {
+          clearTimeout(timer);
+          lastErr = e;
+          if (options.signal?.aborted) throw e;
+          if (attempt < 2) {
+            await new Promise((r) => setTimeout(r, 1200 * (attempt + 1)));
+            continue;
+          }
+        }
+      }
+      if (!res) {
+        throw lastErr || new Error('Request failed');
+      }
     } catch (e: unknown) {
       const tip =
         'Cannot reach diary API (often a free Render cold start — wait ~1 min and retry).';

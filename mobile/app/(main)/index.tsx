@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Dimensions,
   Pressable,
@@ -15,6 +15,8 @@ import { useTheme } from '@/context/ThemeContext';
 import { useDrawerShell } from '@/context/DrawerShellContext';
 import { DiaryEntry, friendlyApiMessage } from '@/lib/api';
 import { draftHasWork, listAllDrafts, type EntryDraft } from '@/lib/entryDraft';
+import { readCachedEntries, writeCachedEntries } from '@/lib/entryCache';
+import { warmDiaryApi } from '@/lib/apiWarmup';
 import { NightLandscape } from '@/components/home/NightLandscape';
 import { HabitChallengeBanner } from '@/components/home/HabitChallengeBanner';
 import { HomeEntryCard, type HomeListItem } from '@/components/home/HomeEntryCard';
@@ -25,8 +27,28 @@ import { ActionSheet, SheetAction } from '@/components/ui/ActionSheet';
 
 const HERO_H = Math.round(Dimensions.get('window').height * 0.34);
 
+function glimpseParts(entry?: DiaryEntry, draft?: EntryDraft): { title: string; body: string } {
+  const title = (draft?.title || entry?.title || '').trim();
+  let body = '';
+  const compose = (draft?.draft || '').trim();
+  if (compose) {
+    body = compose;
+  } else if (entry?.logs?.length) {
+    body = entry.logs
+      .map((l) => (l.text || '').trim())
+      .filter(Boolean)
+      .join('\n');
+  } else {
+    body = (entry?.body || '').trim();
+  }
+  if (title && (body === title || body.startsWith(`${title}\n`))) {
+    body = body.slice(title.length).trim();
+  }
+  return { title, body };
+}
+
 export default function HomeScreen() {
-  const { api } = useSettings();
+  const { api, config } = useSettings();
   const { tokens, isDark } = useTheme();
   const { openDrawer } = useDrawerShell();
   const router = useRouter();
@@ -45,26 +67,47 @@ export default function HomeScreen() {
 
   const today = toDateKey();
 
-  const load = useCallback(async () => {
-    setError('');
-    try {
-      const [list, draftMap] = await Promise.all([
-        api.listEntries(40),
-        listAllDrafts(),
-      ]);
-      setEntries(list);
+  // Instant paint from last visit
+  useEffect(() => {
+    void (async () => {
+      const [cached, draftMap] = await Promise.all([readCachedEntries(), listAllDrafts()]);
+      if (cached?.length) {
+        setEntries(cached);
+        setLoading(false);
+      }
       setDrafts(draftMap);
-    } catch (e: unknown) {
-      setError(friendlyApiMessage(e));
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [api]);
+    })();
+  }, []);
+
+  const load = useCallback(
+    async (opts?: { soft?: boolean }) => {
+      setError('');
+      setEntries((prev) => {
+        if (!opts?.soft && prev.length === 0) setLoading(true);
+        return prev;
+      });
+      void warmDiaryApi(config.apiUrl);
+      try {
+        const [list, draftMap] = await Promise.all([api.listEntries(40), listAllDrafts()]);
+        setEntries(list);
+        setDrafts(draftMap);
+        void writeCachedEntries(list);
+      } catch (e: unknown) {
+        setEntries((prev) => {
+          if (prev.length === 0) setError(friendlyApiMessage(e));
+          return prev;
+        });
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    },
+    [api, config.apiUrl]
+  );
 
   useFocusEffect(
     useCallback(() => {
-      load();
+      void load({ soft: true });
     }, [load])
   );
 
@@ -75,20 +118,29 @@ export default function HomeScreen() {
       const local = drafts[e.date];
       const isDraft = local ? draftHasWork(local) : false;
       const mood = isDraft && local?.mood != null ? local.mood : e.mood ?? null;
+      const glimpse = glimpseParts(e, local);
       byDate.set(e.date, {
         date: e.date,
         mood,
         isDraft,
-        isFavorite: !!e.favorite,
+        isFavorite: !!(local?.favorite ?? e.favorite),
+        gemId: e.gemId || local?.gemId || null,
+        title: glimpse.title,
+        preview: glimpse.body,
+        photoIds: e.photoIds || [],
       });
     }
 
     for (const [date, draft] of Object.entries(drafts)) {
       if (byDate.has(date)) continue;
+      const glimpse = glimpseParts(undefined, draft);
       byDate.set(date, {
         date,
         mood: draft.mood,
         isDraft: true,
+        title: glimpse.title,
+        preview: glimpse.body,
+        photoIds: [],
       });
     }
 
@@ -106,7 +158,7 @@ export default function HomeScreen() {
     return Array.from(map.entries()).sort((a, b) => b[0].localeCompare(a[0]));
   }, [items]);
 
-  const openToday = () => router.push(`/day/${today}`);
+  const openToday = () => router.push(`/day/${today}?mode=edit`);
 
   const iconColor = isDark ? 'rgba(255,255,255,0.92)' : tokens.text;
 
@@ -116,7 +168,7 @@ export default function HomeScreen() {
         <View style={[styles.hero, { height: HERO_H }]}>
           <NightLandscape />
         </View>
-        <LoadingBlock message="Waking diary…" style={{ marginTop: spacing.xl }} />
+        <LoadingBlock message="Loading diary…" style={{ marginTop: spacing.xl }} />
       </View>
     );
   }
@@ -131,7 +183,7 @@ export default function HomeScreen() {
             refreshing={refreshing}
             onRefresh={() => {
               setRefreshing(true);
-              load();
+              void load({ soft: true });
             }}
             tintColor={tokens.accent}
           />
@@ -150,22 +202,6 @@ export default function HomeScreen() {
               <Text style={[styles.icon, { color: iconColor }]}>☰</Text>
             </Pressable>
             <View style={styles.topRight}>
-              <Pressable
-                onPress={() =>
-                  setSheet({
-                    title: 'Gifts',
-                    message: 'Habit rewards and packs will unlock as you write.',
-                    actions: [
-                      { key: 'ok', label: 'Got it', icon: '✓', onPress: () => undefined },
-                    ],
-                  })
-                }
-                hitSlop={10}
-                style={styles.iconBtn}
-                accessibilityLabel="Gifts"
-              >
-                <Text style={{ fontSize: 20 }}>🎁</Text>
-              </Pressable>
               <Pressable
                 onPress={() => router.push('/search')}
                 hitSlop={10}

@@ -276,6 +276,8 @@ export async function restoreAllFromDrive(
         tags: e.tags || [],
         people: e.people || [],
         favorite: !!e.favorite,
+        legendId: e.legendId || '',
+        gemId: e.gemId || '',
         weatherNote: e.weatherNote || '',
         body: e.body || '',
         logs: e.logs || [],

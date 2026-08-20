@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="backPlate" x1="12" y1="6" x2="54" y2="58" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#9BE2F7"/>
+      <stop offset="0.48" stop-color="#5BA8EA"/>
+      <stop offset="1" stop-color="#3A6FDB"/>
+    </linearGradient>
+    <linearGradient id="backGloss" x1="18" y1="8" x2="40" y2="28" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="backChevron" x1="24" y1="16" x2="40" y2="48" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#E4F3FF"/>
+    </linearGradient>
+    <filter id="backShadow" x="0" y="0" width="64" height="64">
+      <feDropShadow dx="0" dy="3" stdDeviation="2.2" flood-color="#1A3A72" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+  <ellipse cx="32" cy="56.5" rx="15" ry="3.4" fill="#0B1A33" opacity="0.28"/>
+  <rect x="6" y="5" width="52" height="52" rx="16" fill="url(#backPlate)" filter="url(#backShadow)"/>
+  <rect x="8.5" y="7.5" width="47" height="22" rx="12" fill="url(#backGloss)"/>
+  <path d="M37.5 18.5L24 32l13.5 13.5" stroke="#1E4B8A" stroke-width="7.2" stroke-linecap="round" stroke-linejoin="round" opacity="0.28"/>
+  <path d="M36.2 17.2L22.7 30.7l13.5 13.5" stroke="url(#backChevron)" stroke-width="6.4" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

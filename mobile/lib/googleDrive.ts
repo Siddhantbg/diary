@@ -31,20 +31,30 @@ export function isGoogleConfigured(): boolean {
   return !!(GOOGLE_WEB_CLIENT_ID || GOOGLE_ANDROID_CLIENT_ID || GOOGLE_IOS_CLIENT_ID);
 }
 
+/** Expo Google provider throws if platform client id is `undefined` — never omit it. */
+const PLACEHOLDER_CLIENT_ID =
+  '000000000000-placeholder.apps.googleusercontent.com';
+
 export function useGoogleDriveAuthRequest() {
   const redirectUri = AuthSession.makeRedirectUri({
     scheme: 'diary',
     path: 'oauth',
   });
 
+  const web =
+    GOOGLE_WEB_CLIENT_ID ||
+    GOOGLE_ANDROID_CLIENT_ID ||
+    GOOGLE_IOS_CLIENT_ID ||
+    PLACEHOLDER_CLIENT_ID;
+  // Must be defined on Android/iOS or useAuthRequest crashes the screen.
+  const android = GOOGLE_ANDROID_CLIENT_ID || GOOGLE_WEB_CLIENT_ID || web;
+  const ios = GOOGLE_IOS_CLIENT_ID || GOOGLE_WEB_CLIENT_ID || web;
+
   return Google.useAuthRequest({
-    webClientId:
-      GOOGLE_WEB_CLIENT_ID ||
-      GOOGLE_ANDROID_CLIENT_ID ||
-      GOOGLE_IOS_CLIENT_ID ||
-      '000000000000-placeholder.apps.googleusercontent.com',
-    androidClientId: GOOGLE_ANDROID_CLIENT_ID || GOOGLE_WEB_CLIENT_ID || undefined,
-    iosClientId: GOOGLE_IOS_CLIENT_ID || GOOGLE_WEB_CLIENT_ID || undefined,
+    clientId: web,
+    webClientId: web,
+    androidClientId: android,
+    iosClientId: ios,
     scopes: [...PROFILE_SCOPES, DRIVE_SCOPE],
     redirectUri,
     extraParams: {

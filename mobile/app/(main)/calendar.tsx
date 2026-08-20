@@ -19,7 +19,6 @@ import {
   formatCalendarStrip,
   formatMonthYear,
   monthRange,
-  MOOD_EMOJIS,
   MOOD_LABELS,
   toDateKey,
 } from '@/lib/dates';
@@ -27,15 +26,38 @@ import { fonts, radius, spacing } from '@/constants/theme';
 import { PrimaryButton } from '@/components/ui';
 import { SheetHeader } from '@/components/ui/SheetClose';
 import { GalleryIcon } from '@/components/icons/GalleryIcon';
+import { MoodFace } from '@/components/mood/MoodFace';
+import { GemIcon } from '@/components/gems/GemIcon';
 import {
   defaultLegends,
   DiaryLegend,
+  legendById,
   loadLegends,
   markerDotColor,
+  markerGemId,
+  cherishedGemId,
 } from '@/lib/legends';
+import { readCachedMarkers, writeCachedMarkers } from '@/lib/entryCache';
+import { warmDiaryApi } from '@/lib/apiWarmup';
+import { loadDayGems } from '@/lib/dayGems';
 
 function monthCacheKey(year: number, monthIndex: number) {
   return `${year}-${monthIndex}`;
+}
+
+async function withLocalGems(
+  markers: Record<string, DayMarker>
+): Promise<Record<string, DayMarker>> {
+  const gems = await loadDayGems();
+  if (!Object.keys(gems).length) return markers;
+  const next = { ...markers };
+  for (const [date, gemId] of Object.entries(gems)) {
+    if (!next[date]) continue;
+    if (!next[date].gemId) {
+      next[date] = { ...next[date], gemId };
+    }
+  }
+  return next;
 }
 
 export default function CalendarScreen() {
@@ -107,13 +129,29 @@ export default function CalendarScreen() {
       const job = (async () => {
         try {
           const { from, to } = monthRange(year, month);
+          // Show last month map immediately while network runs
+          if (!silent) {
+            const cached = await readCachedMarkers(from, to);
+            if (cached) {
+              const merged = await withLocalGems(cached);
+              setMarkers(merged);
+              markersMonthRef.current = key;
+              setMarkersLoading(false);
+            }
+          }
+          void warmDiaryApi();
           const data = await api.markers(from, to);
-          setMarkers(data);
+          const merged = await withLocalGems(data);
+          setMarkers(merged);
           markersMonthRef.current = key;
-          return data;
+          void writeCachedMarkers(from, to, merged);
+          return merged;
         } catch (e: unknown) {
-          setMarkersError(friendlyApiMessage(e));
-          return null;
+          // Keep cached markers if present
+          if (!markersRef.current || Object.keys(markersRef.current).length === 0) {
+            setMarkersError(friendlyApiMessage(e));
+          }
+          return markersRef.current;
         } finally {
           setMarkersLoading(false);
           if (inflightKeyRef.current === key) {
@@ -160,7 +198,9 @@ export default function CalendarScreen() {
       try {
         const e = await api.getEntry(date);
         if (seq !== entrySeqRef.current) return;
-        setEntry(e);
+        const gems = await loadDayGems();
+        const gemId = e.gemId || gems[date] || '';
+        setEntry(gemId && !e.gemId ? { ...e, gemId } : e);
       } catch (err: unknown) {
         if (seq !== entrySeqRef.current) return;
         if (err instanceof ApiError && err.status === 404) {
@@ -276,8 +316,9 @@ export default function CalendarScreen() {
     setMonthPickerOpen(false);
   };
 
-  const openDay = (date?: string) => {
-    router.push(`/day/${date || selected}`);
+  const openDay = (date?: string, opts?: { edit?: boolean }) => {
+    const d = date || selected;
+    router.push(opts?.edit ? `/day/${d}?mode=edit` : `/day/${d}`);
   };
 
   const markedDates = useMemo(() => {
@@ -400,7 +441,14 @@ export default function CalendarScreen() {
           key={`${currentMonth}-${calendarFirstDay}`}
           current={currentMonth}
           firstDay={calendarFirstDay}
-          onDayPress={(day: DateData) => setSelected(day.dateString)}
+          onDayPress={(day: DateData) => {
+            const d = day.dateString;
+            setSelected(d);
+            // Existing entry → open written content (view); empty stays selected for preview
+            if (markers[d]?.hasEntry) {
+              router.push(`/day/${d}`);
+            }
+          }}
           markedDates={markedDates}
           onMonthChange={(m) => {
             setVisible({ year: m.year, month: m.month - 1 });
@@ -442,8 +490,10 @@ export default function CalendarScreen() {
               style={styles.legendItem}
               hitSlop={4}
             >
-              <Text style={{ color: l.color, fontSize: 12 }}>●</Text>
-              <Text style={[styles.legendLabel, { color: tokens.textMuted }]}>{l.name}</Text>
+              {l.gemId ? (
+                <GemIcon gemId={l.gemId} size={16} />
+              ) : null}
+              <Text style={[styles.legendLabel, { color: l.color }]}>{l.name}</Text>
             </Pressable>
           ))}
           <Pressable onPress={() => router.push('/legends')} hitSlop={8}>
@@ -461,9 +511,12 @@ export default function CalendarScreen() {
             {formatCalendarStrip(selected)}
           </Text>
           {selectedMood ? (
-            <Text style={[styles.stripMood, { color: tokens.accent }]}>
-              {MOOD_EMOJIS[selectedMood]} {MOOD_LABELS[selectedMood]}
-            </Text>
+            <View style={styles.stripMoodRow}>
+              <MoodFace mood={selectedMood} size={22} />
+              <Text style={[styles.stripMood, { color: tokens.accent }]}>
+                {MOOD_LABELS[selectedMood]}
+              </Text>
+            </View>
           ) : null}
         </View>
 
@@ -485,18 +538,32 @@ export default function CalendarScreen() {
               <Text style={[styles.emptySub, { color: tokens.textMuted }]}>Write now!</Text>
               <PrimaryButton
                 label="Write now"
-                onPress={() => openDay()}
+                onPress={() => openDay(undefined, { edit: true })}
                 style={{ marginTop: spacing.md, alignSelf: 'center', minWidth: 160 }}
               />
             </View>
           ) : (
             <Pressable onPress={() => openDay()} style={styles.entryBlock}>
               <View style={styles.entryHeader}>
-                <Text style={[styles.entryTitle, { color: tokens.text }]} numberOfLines={1}>
+                <Text
+                  style={[
+                    styles.entryTitle,
+                    {
+                      color: entry!.favorite
+                        ? legends.find((l) => l.system === 'cherished')?.color || tokens.favorite
+                        : entry!.legendId
+                          ? legendById(legends, entry!.legendId)?.color || tokens.text
+                          : tokens.text,
+                    },
+                  ]}
+                  numberOfLines={1}
+                >
                   {entry!.title || 'Untitled day'}
                 </Text>
                 {entry!.favorite ? (
-                  <Text style={{ color: tokens.favorite, fontSize: 16 }}>★</Text>
+                  <GemIcon gemId={entry!.gemId || cherishedGemId(legends)} size={18} />
+                ) : entry!.legendId ? (
+                  <GemIcon gemId={markerGemId(legends, entry!)} size={16} />
                 ) : null}
               </View>
               {entry!.mood ? (
@@ -705,6 +772,12 @@ const styles = StyleSheet.create({
     fontFamily: fonts.body,
     fontSize: 13,
     textAlign: 'center',
+  },
+  stripMoodRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
     marginTop: 4,
   },
   panel: {

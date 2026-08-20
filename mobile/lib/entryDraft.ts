@@ -11,6 +11,7 @@ export type EntryDraft = {
   mood: number | null;
   favorite: boolean;
   legendId: string;
+  gemId: string;
   weatherNote: string;
   /** ISO string if user set a custom next-log time */
   customLogTimeIso: string | null;
@@ -31,6 +32,7 @@ export function isDraftEmpty(d: EntryDraft | null | undefined): boolean {
     d.mood == null &&
     !d.favorite &&
     !d.legendId &&
+    !d.gemId &&
     !d.weatherNote.trim() &&
     !d.customLogTimeIso
   );
@@ -47,6 +49,7 @@ export function draftHasWork(d: EntryDraft | null | undefined): boolean {
     d.mood != null ||
     d.favorite ||
     !!d.legendId ||
+    !!d.gemId ||
     !!d.weatherNote.trim() ||
     !!d.customLogTimeIso
   );
@@ -69,6 +72,7 @@ export async function loadEntryDraft(date: string): Promise<EntryDraft | null> {
           : Number(parsed.mood),
       favorite: !!parsed.favorite,
       legendId: String(parsed.legendId ?? ''),
+      gemId: String(parsed.gemId ?? ''),
       weatherNote: String(parsed.weatherNote ?? ''),
       customLogTimeIso: parsed.customLogTimeIso
         ? String(parsed.customLogTimeIso)
@@ -131,6 +135,7 @@ export async function listAllDrafts(): Promise<Record<string, EntryDraft>> {
                 : Number(parsed.mood),
             favorite: !!parsed.favorite,
             legendId: String(parsed.legendId ?? ''),
+            gemId: String(parsed.gemId ?? ''),
             weatherNote: String(parsed.weatherNote ?? ''),
             customLogTimeIso: parsed.customLogTimeIso
               ? String(parsed.customLogTimeIso)

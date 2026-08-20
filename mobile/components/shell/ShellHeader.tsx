@@ -6,6 +6,7 @@ import { useDrawerShell } from '@/context/DrawerShellContext';
 import { useTheme } from '@/context/ThemeContext';
 import { fonts, spacing } from '@/constants/theme';
 import { MyDiaryTitle } from '@/components/brand/DiaryMark';
+import { BackIcon } from '@/components/icons/BackIcon';
 
 type Props = {
   title?: string;
@@ -22,10 +23,15 @@ export function ShellHeader({ title, showSearch, right }: Props) {
 
   const isMine = pathname === '/mine' || pathname?.endsWith('/mine');
   const isCalendar = pathname === '/calendar' || pathname?.endsWith('/calendar');
+  const showHomeBack = isMine || isCalendar;
 
   const resolvedTitle = title ?? (isMine ? 'Mine' : isCalendar ? 'Calendar' : 'MyDiary');
   const isBrandTitle = resolvedTitle === 'MyDiary';
   const resolvedSearch = showSearch ?? !isMine;
+
+  const goHome = () => {
+    router.navigate('/');
+  };
 
   return (
     <View
@@ -38,16 +44,29 @@ export function ShellHeader({ title, showSearch, right }: Props) {
         },
       ]}
     >
-      <Pressable
-        onPress={openDrawer}
-        hitSlop={12}
-        accessibilityLabel="Open menu"
-        style={styles.iconBtn}
-      >
-        <Text style={[styles.icon, { color: tokens.text }]}>☰</Text>
-      </Pressable>
+      {showHomeBack ? (
+        <Pressable
+          onPress={goHome}
+          hitSlop={12}
+          accessibilityLabel="Back to home"
+          style={styles.iconBtn}
+        >
+          <BackIcon size={32} />
+        </Pressable>
+      ) : null}
 
-      <Pressable onPress={() => router.push('/')} style={styles.titlePress}>
+      {!isCalendar ? (
+        <Pressable
+          onPress={openDrawer}
+          hitSlop={12}
+          accessibilityLabel="Open menu"
+          style={styles.iconBtn}
+        >
+          <Text style={[styles.icon, { color: tokens.text }]}>☰</Text>
+        </Pressable>
+      ) : null}
+
+      <Pressable onPress={goHome} style={styles.titlePress}>
         {isBrandTitle ? (
           <MyDiaryTitle color={tokens.text} fontSize={22} markSize={30} />
         ) : (
@@ -90,7 +109,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: spacing.md,
     paddingBottom: 12,
-    gap: 8,
+    gap: 4,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   iconBtn: {

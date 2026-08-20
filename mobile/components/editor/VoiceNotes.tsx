@@ -17,8 +17,8 @@ type Props = {
   recording: boolean;
   recordingMs: number;
   uploading: boolean;
-  onStopRecording: () => void;
-  onDelete: (id: string) => void;
+  onStopRecording?: () => void;
+  onDelete?: (id: string) => void;
 };
 
 function formatMs(ms: number) {
@@ -36,6 +36,7 @@ export function VoiceNotes({
   onStopRecording,
   onDelete,
 }: Props) {
+  const canDelete = typeof onDelete === 'function';
   const { tokens } = useTheme();
   const { api } = useSettings();
   const [playingId, setPlayingId] = useState<string | null>(null);
@@ -109,6 +110,7 @@ export function VoiceNotes({
       {recording ? (
         <Pressable
           onPress={onStopRecording}
+          disabled={!onStopRecording}
           style={[styles.recBar, { backgroundColor: 'rgba(220, 60, 60, 0.14)', borderColor: tokens.danger }]}
         >
           <View style={[styles.recDot, { backgroundColor: tokens.danger }]} />
@@ -148,15 +150,17 @@ export function VoiceNotes({
                 {active ? 'Playing…' : 'Tap play to listen'}
               </Text>
             </View>
-            <Pressable onPress={() => confirmDelete(id)} hitSlop={10} accessibilityLabel="Delete">
-              <Text style={{ color: tokens.danger, fontSize: 16 }}>⌫</Text>
-            </Pressable>
+            {canDelete ? (
+              <Pressable onPress={() => confirmDelete(id)} hitSlop={10} accessibilityLabel="Delete">
+                <Text style={{ color: tokens.danger, fontSize: 16 }}>⌫</Text>
+              </Pressable>
+            ) : null}
           </View>
         );
       })}
 
       <ActionSheet
-        visible={sheetOpen}
+        visible={sheetOpen && canDelete}
         title="Delete voice note?"
         message="This cannot be undone."
         onClose={() => setSheetOpen(false)}
@@ -169,7 +173,7 @@ export function VoiceNotes({
             onPress: async () => {
               const id = pendingDeleteId;
               setPendingDeleteId(null);
-              if (!id) return;
+              if (!id || !onDelete) return;
               if (playingId === id) await stopPlayback();
               onDelete(id);
             },

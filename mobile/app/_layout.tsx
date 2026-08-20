@@ -21,10 +21,14 @@ import { PinGate } from '@/components/PinGate';
 import { SetDiaryLockPrompt } from '@/components/lock/SetDiaryLockPrompt';
 import { BackupAutoScheduler } from '@/components/lock/BackupAutoScheduler';
 import { fonts } from '@/constants/theme';
+import { warmDiaryApi } from '@/lib/apiWarmup';
 
 export { ErrorBoundary } from 'expo-router';
 
 SplashScreen.preventAutoHideAsync();
+
+// Start waking the free Render dyno immediately (parallel with fonts).
+void warmDiaryApi();
 
 export default function RootLayout() {
   const [loaded, error] = useFonts({

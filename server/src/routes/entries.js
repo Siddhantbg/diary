@@ -58,6 +58,7 @@ function serializeEntry(entry) {
     people: obj.people || [],
     favorite: !!obj.favorite,
     legendId: obj.legendId ? String(obj.legendId) : '',
+    gemId: obj.gemId ? String(obj.gemId) : '',
     photoIds: (obj.photoIds || []).map(String),
     voiceIds: (obj.voiceIds || []).map(String),
     weatherNote: obj.weatherNote || '',
@@ -119,7 +120,9 @@ router.get('/markers', async (req, res) => {
       if (to) filter.date.$lte = to;
     }
 
-    const entries = await Entry.find(filter).select('date favorite photoIds mood legendId').lean();
+    const entries = await Entry.find(filter)
+      .select('date favorite photoIds mood legendId gemId')
+      .lean();
     const markers = {};
     for (const e of entries) {
       markers[e.date] = {
@@ -128,6 +131,7 @@ router.get('/markers', async (req, res) => {
         mood: e.mood ?? null,
         hasEntry: true,
         legendId: e.legendId ? String(e.legendId) : '',
+        gemId: e.gemId ? String(e.gemId) : '',
       };
     }
     res.json(markers);
@@ -214,6 +218,9 @@ async function upsertEntry(req, res) {
     if (req.body.favorite !== undefined) update.favorite = !!req.body.favorite;
     if (req.body.legendId !== undefined) {
       update.legendId = String(req.body.legendId || '').trim().slice(0, 80);
+    }
+    if (req.body.gemId !== undefined) {
+      update.gemId = String(req.body.gemId || '').trim().slice(0, 40);
     }
     if (req.body.weatherNote !== undefined) update.weatherNote = String(req.body.weatherNote);
     // Full replace of timed moments (used by data package import)

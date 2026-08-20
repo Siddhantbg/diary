@@ -19,21 +19,24 @@ import { useSettings } from '@/context/SettingsContext';
 import { useTheme } from '@/context/ThemeContext';
 import { DiaryEntry } from '@/lib/api';
 import { MoodSheet } from '@/components/editor/MoodSheet';
+import { GemSheet } from '@/components/editor/GemSheet';
 import { DateTimePickerModal } from '@/components/editor/DateTimePickerModal';
 import { EditorToolStrip, ToolId } from '@/components/editor/EditorToolStrip';
+import { DEFAULT_CHERISHED_GEM } from '@/lib/gems';
+import { getDayGem, setDayGem } from '@/lib/dayGems';
 import { VoiceNotes } from '@/components/editor/VoiceNotes';
 import { TagsEditor } from '@/components/editor/TagsEditor';
 import { PhotoGrid } from '@/components/PhotoGrid';
 import { SheetHeader } from '@/components/ui/SheetClose';
 import { ActionSheet, SheetAction } from '@/components/ui/ActionSheet';
 import { GalleryIcon } from '@/components/icons/GalleryIcon';
+import { EditIcon } from '@/components/icons/EditIcon';
 import {
   getEntryDateParts,
-  MOOD_COLORS,
-  MOOD_EMOJIS,
   shiftDateKey,
   toDateKey,
 } from '@/lib/dates';
+import { MoodFace } from '@/components/mood/MoodFace';
 import { formatPrefTime, usePreferences } from '@/context/PreferencesContext';
 import { fonts, radius, spacing } from '@/constants/theme';
 import {
@@ -67,13 +70,66 @@ const emptyEntry = (date: string): DiaryEntry => ({
   people: [],
   favorite: false,
   legendId: '',
+  gemId: '',
   photoIds: [],
   voiceIds: [],
   weatherNote: '',
 });
 
-/** Default mood circle (reference orange neutral face). */
-const NEUTRAL_MOOD = '😐';
+/** Default mood face when none selected (meh from custom pack). */
+const NEUTRAL_MOOD = null;
+
+function entryHasReadableContent(e: DiaryEntry): boolean {
+  return !!(
+    e.title?.trim() ||
+    e.body?.trim() ||
+    (e.logs && e.logs.length > 0) ||
+    (e.photoIds && e.photoIds.length > 0) ||
+    (e.voiceIds && e.voiceIds.length > 0)
+  );
+}
+
+/** Full diary text for read/edit (moments joined, else body). */
+function entryTextFrom(e: DiaryEntry): string {
+  if (e.logs?.length) {
+    return e.logs
+      .map((l) => l.text || '')
+      .filter((t) => t.trim())
+      .join('\n\n');
+  }
+  return (e.body || '').trim();
+}
+
+/** Normalize API payloads so missing arrays never crash the day screen. */
+function normalizeEntry(data: Partial<DiaryEntry> & { date: string }): DiaryEntry {
+  const logs = Array.isArray(data.logs) ? data.logs : [];
+  const body = String(data.body ?? '');
+  // Older API responses may only have `body` — treat it as readable content.
+  const effectiveLogs =
+    logs.length > 0
+      ? logs
+      : body.trim()
+        ? [{ id: 'legacy-body', text: body, at: data.createdAt || '' }]
+        : [];
+  return {
+    id: String(data.id ?? ''),
+    date: data.date,
+    title: String(data.title ?? ''),
+    body: body || (effectiveLogs.length ? effectiveLogs[effectiveLogs.length - 1].text : ''),
+    logs: effectiveLogs,
+    mood: data.mood ?? null,
+    tags: Array.isArray(data.tags) ? data.tags : [],
+    people: Array.isArray(data.people) ? data.people : [],
+    favorite: !!data.favorite,
+    legendId: String(data.legendId ?? ''),
+    gemId: String(data.gemId ?? ''),
+    photoIds: Array.isArray(data.photoIds) ? data.photoIds : [],
+    voiceIds: Array.isArray(data.voiceIds) ? data.voiceIds : [],
+    weatherNote: String(data.weatherNote ?? ''),
+    createdAt: data.createdAt,
+    updatedAt: data.updatedAt,
+  };
+}
 
 function snapshotDraft(input: {
   draft: string;
@@ -83,6 +139,7 @@ function snapshotDraft(input: {
   mood: number | null;
   favorite: boolean;
   legendId: string;
+  gemId: string;
   weatherNote: string;
   customLogTime: Date | null;
 }): EntryDraft {
@@ -94,6 +151,7 @@ function snapshotDraft(input: {
     mood: input.mood,
     favorite: input.favorite,
     legendId: input.legendId || '',
+    gemId: input.gemId || '',
     weatherNote: input.weatherNote,
     customLogTimeIso: input.customLogTime
       ? input.customLogTime.toISOString()
@@ -103,8 +161,9 @@ function snapshotDraft(input: {
 }
 
 export default function DayScreen() {
-  const params = useLocalSearchParams<{ date: string }>();
+  const params = useLocalSearchParams<{ date: string; mode?: string }>();
   const date = Array.isArray(params.date) ? params.date[0] : params.date;
+  const modeParam = Array.isArray(params.mode) ? params.mode[0] : params.mode;
   const { api } = useSettings();
   const { tokens, isDark } = useTheme();
   const { prefs } = usePreferences();
@@ -123,8 +182,11 @@ export default function DayScreen() {
   const [dirty, setDirty] = useState(false);
   const [error, setError] = useState('');
   const [draftNotice, setDraftNotice] = useState(false);
+  /** View existing entry by default; pencil switches to edit. */
+  const [editing, setEditing] = useState(modeParam === 'edit');
 
   const [moodOpen, setMoodOpen] = useState(false);
+  const [gemOpen, setGemOpen] = useState(false);
   const [timeOpen, setTimeOpen] = useState(false);
   const [dateSwitchOpen, setDateSwitchOpen] = useState(false);
   const [showTags, setShowTags] = useState(false);
@@ -161,10 +223,42 @@ export default function DayScreen() {
     dirty,
     draft,
     customLogTime,
+    editing,
   });
-  stateRef.current = { entry, tagsText, peopleText, dirty, draft, customLogTime };
+  stateRef.current = { entry, tagsText, peopleText, dirty, draft, customLogTime, editing };
   /** Avoid writing drafts during server load / restore apply. */
   const canPersistDraftRef = useRef(false);
+
+  const resolveEditingMode = useCallback(
+    (hasServerContent: boolean, hasComposeDraft: boolean) => {
+      if (modeParam === 'edit') {
+        setEditing(true);
+        return;
+      }
+      if (modeParam === 'view') {
+        setEditing(false);
+        return;
+      }
+      // Saved days open in read view. Only auto-edit empty days or when
+      // there's actual unsent compose text (not just meta mirrored in a draft).
+      if (hasServerContent && !hasComposeDraft) {
+        setEditing(false);
+        return;
+      }
+      setEditing(hasComposeDraft || !hasServerContent);
+    },
+    [modeParam]
+  );
+
+  const startEditing = useCallback(() => {
+    setEditing(true);
+    setShowLogs(true);
+    setDraft((prev) => {
+      if (prev.trim()) return prev;
+      return entryTextFrom(stateRef.current.entry);
+    });
+    requestAnimationFrame(() => draftRef.current?.focus());
+  }, []);
 
   const clearRecordTimer = () => {
     if (recordTimerRef.current) {
@@ -174,7 +268,7 @@ export default function DayScreen() {
   };
 
   const flushDraft = useCallback(async () => {
-    if (!date) return;
+    if (!date || !stateRef.current.editing) return;
     const s = stateRef.current;
     await saveEntryDraft(
       date,
@@ -186,6 +280,7 @@ export default function DayScreen() {
         mood: s.entry.mood,
         favorite: s.entry.favorite,
         legendId: s.entry.legendId || '',
+        gemId: s.entry.gemId || '',
         weatherNote: s.entry.weatherNote,
         customLogTime: s.customLogTime,
       })
@@ -199,6 +294,7 @@ export default function DayScreen() {
       mood: local.mood,
       favorite: local.favorite,
       legendId: local.legendId || '',
+      gemId: local.gemId || '',
       weatherNote: local.weatherNote,
     });
     setTagsText(local.tagsText);
@@ -215,6 +311,7 @@ export default function DayScreen() {
       local.mood !== (base.mood ?? null) ||
       local.favorite !== !!base.favorite ||
       (local.legendId || '') !== (base.legendId || '') ||
+      (local.gemId || '') !== (base.gemId || '') ||
       local.weatherNote !== (base.weatherNote || '') ||
       local.tagsText !== (base.tags || []).join(', ') ||
       local.peopleText !== (base.people || []).join(', ');
@@ -234,26 +331,41 @@ export default function DayScreen() {
     setDraftNotice(false);
     try {
       const data = await api.getEntry(date);
+      const baseRaw = normalizeEntry(data);
+      const localGem = await getDayGem(date);
       const base = {
-        ...data,
-        logs: data.logs || [],
-        voiceIds: data.voiceIds || [],
-        photoIds: data.photoIds || [],
-        legendId: data.legendId || '',
+        ...baseRaw,
+        gemId: baseRaw.gemId || localGem || '',
       };
+      if (base.gemId && !baseRaw.gemId) {
+        // Keep local cache in sync when API lacks gemId (pre-deploy)
+        void setDayGem(date, base.gemId);
+      } else if (baseRaw.gemId) {
+        void setDayGem(date, baseRaw.gemId);
+      }
       setEntry(base);
-      setTagsText(data.tags.join(', '));
-      setPeopleText(data.people.join(', '));
+      setTagsText(base.tags.join(', '));
+      setPeopleText(base.people.join(', '));
       setDirty(false);
-      setShowPhotos((data.photoIds?.length ?? 0) > 0);
-      setShowLogs((data.logs?.length ?? 0) > 0);
-      setShowTags((data.tags?.length ?? 0) > 0 || (data.people?.length ?? 0) > 0);
+      setShowPhotos(base.photoIds.length > 0);
+      setShowLogs(true);
+      setShowTags(base.tags.length > 0 || base.people.length > 0);
       setDraft('');
 
       const local = await loadEntryDraft(date);
-      if (local && draftHasWork(local)) {
-        applyLocalDraft(local, base);
+      const composeDraft = !!(local && local.draft.trim());
+      // Only restore a local draft when there's unsent compose text, or the day is empty
+      if (local && (composeDraft || !entryHasReadableContent(base))) {
+        if (draftHasWork(local)) applyLocalDraft(local, base);
+      } else if (
+        modeParam === 'edit' &&
+        entryHasReadableContent(base) &&
+        !composeDraft
+      ) {
+        // Edit existing entry in place — seed the field with current text
+        setDraft(entryTextFrom(base));
       }
+      resolveEditingMode(entryHasReadableContent(base), composeDraft);
     } catch (e: unknown) {
       if (e && typeof e === 'object' && 'status' in e && (e as { status: number }).status === 404) {
         const base = emptyEntry(date);
@@ -265,9 +377,11 @@ export default function DayScreen() {
         setShowLogs(false);
         setDraft('');
         const local = await loadEntryDraft(date);
+        const composeDraft = !!(local && local.draft.trim());
         if (local && draftHasWork(local)) {
           applyLocalDraft(local, base);
         }
+        resolveEditingMode(false, composeDraft);
       } else {
         setError(e instanceof Error ? e.message : 'Failed to load day');
       }
@@ -277,7 +391,7 @@ export default function DayScreen() {
         canPersistDraftRef.current = true;
       });
     }
-  }, [api, date, applyLocalDraft]);
+  }, [api, date, applyLocalDraft, resolveEditingMode, modeParam]);
 
   useEffect(() => {
     return () => {
@@ -305,7 +419,7 @@ export default function DayScreen() {
 
   // Debounced autosave of unsaved compose + meta to the phone
   useEffect(() => {
-    if (loading || !date || !canPersistDraftRef.current) return;
+    if (loading || !date || !editing || !canPersistDraftRef.current) return;
     const timer = setTimeout(() => {
       void saveEntryDraft(
         date,
@@ -317,6 +431,7 @@ export default function DayScreen() {
           mood: entry.mood,
           favorite: entry.favorite,
           legendId: entry.legendId || '',
+          gemId: entry.gemId || '',
           weatherNote: entry.weatherNote,
           customLogTime,
         })
@@ -326,11 +441,13 @@ export default function DayScreen() {
   }, [
     loading,
     date,
+    editing,
     draft,
     entry.title,
     entry.mood,
     entry.favorite,
     entry.legendId,
+    entry.gemId,
     entry.weatherNote,
     tagsText,
     peopleText,
@@ -343,6 +460,43 @@ export default function DayScreen() {
     setDraftNotice(false);
   };
 
+  /** Mood face only changes mood — never enters edit mode. */
+  const applyMood = useCallback(
+    async (mood: number | null) => {
+      setEntry((prev) => ({ ...prev, mood }));
+      setDraftNotice(false);
+      if (editing) {
+        setDirty(true);
+        return;
+      }
+      if (!api || !date) return;
+      try {
+        const current = stateRef.current;
+        const saved = await api.saveEntry(date, {
+          title: current.entry.title,
+          mood,
+          favorite: current.entry.favorite,
+          legendId: current.entry.legendId || '',
+          gemId: current.entry.gemId || '',
+          weatherNote: current.entry.weatherNote,
+          tags: current.tagsText
+            .split(',')
+            .map((t) => t.trim())
+            .filter(Boolean),
+          people: current.peopleText
+            .split(',')
+            .map((t) => t.trim())
+            .filter(Boolean),
+        });
+        setEntry(normalizeEntry({ ...saved, date }));
+        setDirty(false);
+      } catch (e: unknown) {
+        setError(e instanceof Error ? e.message : 'Could not update mood');
+      }
+    },
+    [api, date, editing]
+  );
+
   const saveMeta = useCallback(async () => {
     if (!api || !date) return;
     const current = stateRef.current;
@@ -351,6 +505,7 @@ export default function DayScreen() {
       mood: current.entry.mood,
       favorite: current.entry.favorite,
       legendId: current.entry.legendId || '',
+      gemId: current.entry.gemId || '',
       weatherNote: current.entry.weatherNote,
       tags: current.tagsText
         .split(',')
@@ -362,53 +517,72 @@ export default function DayScreen() {
         .filter(Boolean),
     };
     const saved = await api.saveEntry(date, payload);
-    setEntry({
+    const next = normalizeEntry({
       ...saved,
-      logs: saved.logs || [],
-      voiceIds: saved.voiceIds || [],
-      photoIds: saved.photoIds || [],
+      date,
+      gemId: saved.gemId || payload.gemId || '',
+      favorite: saved.favorite ?? payload.favorite,
     });
-    setTagsText(saved.tags.join(', '));
-    setPeopleText(saved.people.join(', '));
+    setEntry(next);
+    void setDayGem(date, next.gemId || null);
+    setTagsText(next.tags.join(', '));
+    setPeopleText(next.people.join(', '));
     setDirty(false);
-    return saved;
+    return next;
   }, [api, date]);
 
-  /** SAVE: meta + optional new moment (draft) timed from system clock (or custom picker). */
+  /** SAVE: update entry text in place (not a separate “write more” moment). */
   const handleSave = useCallback(async () => {
     if (!api || !date) return;
     setSaving(true);
     setError('');
     try {
       const text = draft.trim();
-      if (text) {
-        if (stateRef.current.dirty) await saveMeta();
-        // Device / system time at the moment of Save — unless a custom time was set from the toolbar
-        const at = (customLogTime ?? new Date()).toISOString();
-        const saved = await api.addLog(date, text, at);
-        setEntry({
-          ...saved,
-          logs: saved.logs || [],
-          voiceIds: saved.voiceIds || [],
-          photoIds: saved.photoIds || [],
-        });
-        setDraft('');
-        setCustomLogTime(null);
-        setShowLogs(true);
-        setDraftNotice(false);
-        // Publish clears compose buffer; drop local draft for this day
-        await clearEntryDraft(date);
-      } else {
-        await saveMeta();
-        setDraftNotice(false);
-        await clearEntryDraft(date);
-      }
+      const current = stateRef.current.entry;
+      const atIso =
+        customLogTime?.toISOString() ||
+        current.logs?.[0]?.at ||
+        new Date().toISOString();
+      const payload = {
+        title: current.title,
+        body: text,
+        mood: current.mood,
+        favorite: current.favorite,
+        legendId: current.legendId || '',
+        gemId: current.gemId || '',
+        weatherNote: current.weatherNote,
+        tags: tagsText
+          .split(',')
+          .map((t) => t.trim())
+          .filter(Boolean),
+        people: peopleText
+          .split(',')
+          .map((t) => t.trim())
+          .filter(Boolean),
+        logs: text ? [{ text, at: atIso }] : [],
+      };
+      const saved = await api.saveEntry(date, payload);
+      const next = normalizeEntry({
+        ...saved,
+        date,
+        gemId: saved.gemId || payload.gemId || '',
+        favorite: saved.favorite ?? payload.favorite,
+      });
+      setEntry(next);
+      void setDayGem(date, next.gemId || null);
+      setDraft('');
+      setCustomLogTime(null);
+      setDirty(false);
+      setDraftNotice(false);
+      setEditing(false);
+      setShowLogs(true);
+      await clearEntryDraft(date);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Save failed');
     } finally {
       setSaving(false);
     }
-  }, [api, date, draft, customLogTime, saveMeta]);
+  }, [api, date, draft, customLogTime, tagsText, peopleText]);
 
   const removeLog = (logId: string) => {
     openSheet({
@@ -702,25 +876,93 @@ export default function DayScreen() {
     });
   };
 
+  const applyGem = useCallback(
+    async (gemId: string | null) => {
+      const nextFavorite = !!gemId;
+      const nextGem = gemId || '';
+      setEntry((prev) => ({
+        ...prev,
+        favorite: nextFavorite,
+        gemId: nextGem,
+      }));
+      setDraftNotice(false);
+      if (date) void setDayGem(date, nextGem || null);
+      if (editing) {
+        setDirty(true);
+        return;
+      }
+      if (!api || !date) return;
+      try {
+        const current = stateRef.current;
+        const saved = await api.saveEntry(date, {
+          title: current.entry.title,
+          mood: current.entry.mood,
+          favorite: nextFavorite,
+          legendId: current.entry.legendId || '',
+          gemId: nextGem,
+          weatherNote: current.entry.weatherNote,
+          tags: current.tagsText
+            .split(',')
+            .map((t) => t.trim())
+            .filter(Boolean),
+          people: current.peopleText
+            .split(',')
+            .map((t) => t.trim())
+            .filter(Boolean),
+        });
+        setEntry(
+          normalizeEntry({
+            ...saved,
+            date,
+            gemId: saved.gemId || nextGem,
+            favorite: saved.favorite ?? nextFavorite,
+          })
+        );
+        setDirty(false);
+      } catch (e: unknown) {
+        // Local gem still applied; API may not have gemId until redeploy
+        if (/gemId|validation|cast/i.test(String(e))) {
+          setDirty(false);
+          return;
+        }
+        setError(e instanceof Error ? e.message : 'Could not update gem');
+      }
+    },
+    [api, date, editing]
+  );
+
   const openOverflow = () => {
     openSheet({
       title: 'Day options',
-      message: 'Timing, cherish, or clear this entry.',
+      message: editing
+        ? 'Timing, cherish, or clear this entry.'
+        : 'Cherish or clear this entry. Tap edit to write.',
       actions: [
-        {
-          key: 'time',
-          label: customLogTime ? 'Use phone time for next save' : 'Set time for next save',
-          icon: '◷',
-          onPress: () => {
-            if (customLogTime) setCustomLogTime(null);
-            else setTimeOpen(true);
-          },
-        },
+        ...(editing
+          ? [
+              {
+                key: 'time',
+                label: customLogTime ? 'Use phone time for next save' : 'Set time for next save',
+                icon: '◷',
+                onPress: () => {
+                  if (customLogTime) setCustomLogTime(null);
+                  else setTimeOpen(true);
+                },
+              } as SheetAction,
+            ]
+          : [
+              {
+                key: 'edit',
+                label: 'Edit entry',
+                icon: '✎',
+                onPress: () => startEditing(),
+              } as SheetAction,
+            ]),
         {
           key: 'favorite',
-          label: entry.favorite ? 'Remove from cherished' : 'Mark as cherished',
+          label: entry.favorite ? 'Change cherished gem' : 'Mark as cherished',
           icon: entry.favorite ? '☆' : '★',
-          onPress: () => patch('favorite', !entry.favorite),
+          onPress: () => setGemOpen(true),
         },
         {
           key: 'delete',
@@ -798,6 +1040,7 @@ export default function DayScreen() {
         mood: entry.mood,
         favorite: entry.favorite,
         legendId,
+        gemId: entry.gemId || '',
         weatherNote: entry.weatherNote,
         tags: tagsText
           .split(',')
@@ -829,7 +1072,7 @@ export default function DayScreen() {
         addPhoto();
         break;
       case 'favorite':
-        patch('favorite', !entry.favorite);
+        setGemOpen(true);
         break;
       case 'mood':
         setMoodOpen(true);
@@ -859,12 +1102,14 @@ export default function DayScreen() {
     );
   }
 
-  const logs = entry.logs || [];
   const parts = getEntryDateParts(date);
-  const moodFace = entry.mood ? MOOD_EMOJIS[entry.mood] : NEUTRAL_MOOD;
-  const moodTint = entry.mood ? MOOD_COLORS[entry.mood] : 'rgba(255, 160, 80, 0.9)';
   // Reference: "03 Aug 2026" with underline under day only
   const monthYearShort = parts.monthYear; // e.g. "Aug 2026"
+  const titleColor = entry.favorite
+    ? legends.find((l) => l.system === 'cherished')?.color || tokens.favorite
+    : entry.legendId
+      ? legendById(legends, entry.legendId)?.color || tokens.text
+      : tokens.text;
 
   return (
     <KeyboardAvoidingView
@@ -893,15 +1138,33 @@ export default function DayScreen() {
                 <Text style={[styles.dots, { color: tokens.text }]}>···</Text>
               </Pressable>
               <Pressable
-                onPress={handleSave}
-                disabled={saving}
+                onPress={startEditing}
+                hitSlop={8}
                 style={[
-                  styles.saveBtn,
-                  { backgroundColor: tokens.accent, opacity: saving ? 0.7 : 1 },
+                  styles.editBtn,
+                  {
+                    borderColor: tokens.line,
+                    backgroundColor: editing ? tokens.bgElevated : 'transparent',
+                  },
                 ]}
+                accessibilityLabel="Edit entry"
+                accessibilityRole="button"
               >
-                <Text style={styles.saveBtnText}>{saving ? '…' : 'SAVE'}</Text>
+                <EditIcon color={tokens.text} size={18} />
+                <Text style={[styles.editBtnText, { color: tokens.text }]}>EDIT</Text>
               </Pressable>
+              {editing ? (
+                <Pressable
+                  onPress={handleSave}
+                  disabled={saving}
+                  style={[
+                    styles.saveBtn,
+                    { backgroundColor: tokens.accent, opacity: saving ? 0.7 : 1 },
+                  ]}
+                >
+                  <Text style={styles.saveBtnText}>{saving ? '…' : 'SAVE'}</Text>
+                </Pressable>
+              ) : null}
             </View>
           ),
         }}
@@ -916,7 +1179,7 @@ export default function DayScreen() {
           <Text style={[styles.error, { color: tokens.danger }]}>{error}</Text>
         )}
 
-        {draftNotice || !!draft.trim() || dirty ? (
+        {editing && (draftNotice || !!draft.trim() || dirty) ? (
           <Text style={[styles.draftBanner, { color: tokens.textMuted }]}>
             {draftNotice
               ? 'Draft restored — still on this device until you SAVE'
@@ -943,82 +1206,74 @@ export default function DayScreen() {
 
           <Pressable
             onPress={() => setMoodOpen(true)}
-            style={[
-              styles.moodCircle,
-              {
-                backgroundColor: moodTint,
-                borderColor: entry.mood ? tokens.white : 'rgba(255, 255, 255, 0.35)',
-              },
-            ]}
-            accessibilityLabel="Set mood"
+            style={styles.moodSquare}
+            accessibilityLabel="Change mood"
           >
-            <Text style={styles.moodEmoji}>{moodFace}</Text>
+            <MoodFace mood={entry.mood ?? NEUTRAL_MOOD} size={52} />
           </Pressable>
         </View>
 
-        {prefs.showDefaultMoodHint && !entry.mood ? (
+        {editing && prefs.showDefaultMoodHint && !entry.mood ? (
           <Text style={[styles.moodHint, { color: tokens.textSubtle }]}>
             Tap the face to set how your day felt
           </Text>
         ) : null}
 
         {/* Title */}
-        <TextInput
-          ref={titleRef}
-          style={[styles.titleInput, { color: tokens.text }]}
-          placeholder="Title"
-          placeholderTextColor={tokens.textSubtle}
-          value={entry.title}
-          onChangeText={(t) => patch('title', t)}
-          returnKeyType="next"
-          onSubmitEditing={() => draftRef.current?.focus()}
-        />
+        {editing ? (
+          <TextInput
+            ref={titleRef}
+            style={[styles.titleInput, { color: titleColor }]}
+            placeholder="Title"
+            placeholderTextColor={tokens.textSubtle}
+            value={entry.title}
+            onChangeText={(t) => patch('title', t)}
+            returnKeyType="next"
+            onSubmitEditing={() => draftRef.current?.focus()}
+          />
+        ) : entry.title?.trim() ? (
+          <Text style={[styles.titleInput, { color: titleColor }]}>{entry.title}</Text>
+        ) : null}
 
-        {/* Write area — primary compose */}
-        <TextInput
-          ref={draftRef}
-          style={[styles.bodyInput, { color: tokens.text }]}
-          placeholder="Write more here..."
-          placeholderTextColor={tokens.textSubtle}
-          value={draft}
-          onChangeText={(t) => {
-            setDraft(t);
-            setDraftNotice(false);
-          }}
-          multiline
-          textAlignVertical="top"
-          scrollEnabled={false}
-        />
+        {/* Entry text — always directly under title */}
+        {editing ? (
+          <TextInput
+            ref={draftRef}
+            style={[styles.bodyInput, { color: tokens.text }]}
+            placeholder="Write your day…"
+            placeholderTextColor={tokens.textSubtle}
+            value={draft}
+            onChangeText={(t) => {
+              setDraft(t);
+              setDraftNotice(false);
+              setDirty(true);
+            }}
+            multiline
+            textAlignVertical="top"
+            scrollEnabled={false}
+          />
+        ) : entryTextFrom(entry) ? (
+          <Text style={[styles.bodyInput, styles.bodyRead, { color: tokens.text }]}>
+            {entryTextFrom(entry)}
+          </Text>
+        ) : (
+          <Pressable onPress={startEditing} style={styles.emptyRead}>
+            <Text style={[styles.emptyReadTitle, { color: tokens.text }]}>Nothing here yet</Text>
+            <Text style={[styles.emptyReadSub, { color: tokens.textMuted }]}>
+              Tap EDIT to write this day.
+            </Text>
+          </Pressable>
+        )}
 
-        {customLogTime ? (
+        {editing && customLogTime ? (
           <Pressable onPress={() => setTimeOpen(true)}>
             <Text style={[styles.timeNote, { color: tokens.accent }]}>
-              Next save timed for {formatPrefTime(customLogTime.toISOString(), prefs.timeFormat)} ·
-              edit
+              Timed for {formatPrefTime(customLogTime.toISOString(), prefs.timeFormat)} · edit
             </Text>
           </Pressable>
         ) : null}
 
-        {/* Optional sections revealed by toolbar */}
-        {showPhotos || entry.photoIds.length > 0 ? (
-          <PhotoGrid
-            photoIds={entry.photoIds}
-            onAdd={addPhoto}
-            onDelete={deletePhoto}
-            uploading={uploading}
-          />
-        ) : null}
-
-        <VoiceNotes
-          voiceIds={entry.voiceIds || []}
-          recording={recording}
-          recordingMs={recordingMs}
-          uploading={uploadingVoice}
-          onStopRecording={() => void stopVoiceNote()}
-          onDelete={(id) => void deleteVoice(id)}
-        />
-
-        {showTags ? (
+        {editing && showTags ? (
           <View style={styles.metaBlock}>
             <TagsEditor
               value={tagsText}
@@ -1040,51 +1295,70 @@ export default function DayScreen() {
               }}
             />
           </View>
+        ) : !editing && (tagsText.trim() || peopleText.trim()) ? (
+          <View style={styles.metaBlock}>
+            {tagsText.trim() ? (
+              <Text style={[styles.metaRead, { color: tokens.textMuted }]}>
+                Tags · {tagsText}
+              </Text>
+            ) : null}
+            {peopleText.trim() ? (
+              <Text style={[styles.metaRead, { color: tokens.textMuted }]}>
+                People · {peopleText}
+              </Text>
+            ) : null}
+          </View>
         ) : null}
 
-        {logs.length > 0 ? (
-          <View style={styles.momentsBlock}>
-            <Pressable onPress={() => setShowLogs((v) => !v)} style={styles.momentsHeader}>
-              <Text style={[styles.momentsTitle, { color: tokens.textMuted }]}>
-                Moments today · {logs.length}
-              </Text>
-              <Text style={{ color: tokens.accent }}>{showLogs ? 'Hide' : 'Show'}</Text>
-            </Pressable>
-            {showLogs
-              ? logs.map((log) => (
-                  <Pressable
-                    key={log.id}
-                    style={[styles.logBlock, { borderTopColor: tokens.line }]}
-                    onLongPress={() => removeLog(log.id)}
-                  >
-                    <Text style={[styles.logTime, { color: tokens.textMuted }]}>
-                      {formatPrefTime(log.at, prefs.timeFormat)}
-                    </Text>
-                    <Text style={[styles.logText, { color: tokens.text }]}>{log.text}</Text>
-                  </Pressable>
-                ))
-              : null}
-          </View>
+        {/* Media below the written entry */}
+        {showPhotos || entry.photoIds.length > 0 ? (
+          <PhotoGrid
+            photoIds={entry.photoIds}
+            onAdd={editing ? addPhoto : undefined}
+            onDelete={editing ? deletePhoto : undefined}
+            uploading={editing ? uploading : false}
+          />
+        ) : null}
+
+        {recording || uploadingVoice || (entry.voiceIds && entry.voiceIds.length > 0) ? (
+          <VoiceNotes
+            voiceIds={entry.voiceIds || []}
+            recording={editing ? recording : false}
+            recordingMs={recordingMs}
+            uploading={editing ? uploadingVoice : false}
+            onStopRecording={editing ? () => void stopVoiceNote() : undefined}
+            onDelete={editing ? (id) => void deleteVoice(id) : undefined}
+          />
         ) : null}
       </ScrollView>
 
-      <EditorToolStrip
-        favorite={entry.favorite}
-        recording={recording}
-        tagsActive={showTags}
-        legendColor={
-          entry.legendId
-            ? legendById(legends, entry.legendId)?.color ?? tokens.accent
-            : null
-        }
-        onPress={onTool}
-      />
+      {editing ? (
+        <EditorToolStrip
+          favorite={entry.favorite}
+          gemId={entry.gemId}
+          recording={recording}
+          tagsActive={showTags}
+          legendColor={
+            entry.legendId
+              ? legendById(legends, entry.legendId)?.color ?? tokens.accent
+              : null
+          }
+          onPress={onTool}
+        />
+      ) : null}
 
       <MoodSheet
         visible={moodOpen}
         value={entry.mood}
         onClose={() => setMoodOpen(false)}
-        onSelect={(m) => patch('mood', m)}
+        onSelect={(m) => void applyMood(m)}
+      />
+
+      <GemSheet
+        visible={gemOpen}
+        value={entry.favorite ? entry.gemId || DEFAULT_CHERISHED_GEM : null}
+        onClose={() => setGemOpen(false)}
+        onSelect={(g) => void applyGem(g)}
       />
 
       <DateTimePickerModal
@@ -1195,6 +1469,20 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 6,
   },
+  editBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 6,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  editBtnText: {
+    fontFamily: fonts.bodyMedium,
+    fontSize: 13,
+    letterSpacing: 0.4,
+  },
   saveBtnText: {
     color: '#FFFFFF',
     fontFamily: fonts.bodyMedium,
@@ -1230,16 +1518,13 @@ const styles = StyleSheet.create({
     fontSize: 18,
     marginBottom: 6,
   },
-  moodCircle: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    borderWidth: 1.5,
+  moodSquare: {
+    width: 52,
+    height: 52,
+    borderRadius: 12,
+    borderWidth: 0,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  moodEmoji: {
-    fontSize: 26,
   },
   moodHint: {
     fontFamily: fonts.body,
@@ -1248,9 +1533,10 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   titleInput: {
-    fontFamily: fonts.body,
-    fontSize: 28,
-    marginBottom: spacing.md,
+    fontFamily: fonts.display,
+    fontSize: 26,
+    letterSpacing: -0.4,
+    marginBottom: spacing.sm,
     paddingVertical: 4,
   },
   bodyInput: {
@@ -1259,6 +1545,36 @@ const styles = StyleSheet.create({
     lineHeight: 26,
     minHeight: 200,
     paddingVertical: 4,
+  },
+  bodyRead: {
+    minHeight: 0,
+    marginBottom: spacing.md,
+  },
+  readBody: {
+    marginBottom: spacing.md,
+    gap: spacing.lg,
+  },
+  readMoment: {
+    gap: 4,
+  },
+  metaRead: {
+    fontFamily: fonts.body,
+    fontSize: 14,
+    marginTop: spacing.sm,
+  },
+  emptyRead: {
+    paddingVertical: spacing.xl,
+    alignItems: 'center',
+  },
+  emptyReadTitle: {
+    fontFamily: fonts.display,
+    fontSize: 18,
+    marginBottom: 6,
+  },
+  emptyReadSub: {
+    fontFamily: fonts.body,
+    fontSize: 14,
+    textAlign: 'center',
   },
   timeNote: {
     fontFamily: fonts.body,

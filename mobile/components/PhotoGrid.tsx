@@ -9,7 +9,7 @@ import { GalleryIcon } from '@/components/icons/GalleryIcon';
 
 type Props = {
   photoIds: string[];
-  onAdd: () => void;
+  onAdd?: () => void;
   onDelete?: (id: string) => void;
   uploading?: boolean;
 };
@@ -29,15 +29,17 @@ export function PhotoGrid({ photoIds, onAdd, onDelete, uploading }: Props) {
           />
           <Text style={[styles.label, { color: tokens.textMuted }]}>Photos</Text>
         </View>
-        <Pressable
-          onPress={onAdd}
-          style={[styles.addBtn, { backgroundColor: tokens.accent }]}
-          disabled={uploading}
-          accessibilityLabel={uploading ? 'Uploading photo' : 'Add photo'}
-        >
-          <GalleryIcon color="#FFFFFF" size={14} />
-          <Text style={styles.addText}>{uploading ? 'Uploading…' : 'Add'}</Text>
-        </Pressable>
+        {onAdd ? (
+          <Pressable
+            onPress={onAdd}
+            style={[styles.addBtn, { backgroundColor: tokens.accent }]}
+            disabled={uploading}
+            accessibilityLabel={uploading ? 'Uploading photo' : 'Add photo'}
+          >
+            <GalleryIcon color="#FFFFFF" size={14} />
+            <Text style={styles.addText}>{uploading ? 'Uploading…' : 'Add'}</Text>
+          </Pressable>
+        ) : null}
       </View>
       <View style={styles.grid}>
         {photoIds.map((id) => {
@@ -76,7 +78,7 @@ export function PhotoGrid({ photoIds, onAdd, onDelete, uploading }: Props) {
             <ActivityIndicator color={tokens.accent} />
           </View>
         ) : null}
-        {!photoIds.length && !uploading ? (
+        {!photoIds.length && !uploading && onAdd ? (
           <Text style={[styles.empty, { color: tokens.textMuted }]}>
             No photos yet — capture this day.
           </Text>

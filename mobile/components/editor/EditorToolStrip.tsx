@@ -8,6 +8,8 @@ import { GalleryIcon } from '@/components/icons/GalleryIcon';
 import { TagIcon } from '@/components/icons/TagIcon';
 import { LegendIcon } from '@/components/icons/LegendIcon';
 import { ThemeIcon } from '@/components/icons/ThemeIcon';
+import { GemIcon } from '@/components/gems/GemIcon';
+import { DEFAULT_CHERISHED_GEM } from '@/lib/gems';
 
 export type ToolId =
   | 'background'
@@ -21,6 +23,8 @@ export type ToolId =
 
 type Props = {
   favorite?: boolean;
+  /** Gem assigned to this day when cherished. */
+  gemId?: string | null;
   recording?: boolean;
   /** Tags panel open */
   tagsActive?: boolean;
@@ -43,6 +47,7 @@ const TOOLS: { id: ToolId; icon: string; label: string }[] = [
 
 export function EditorToolStrip({
   favorite,
+  gemId,
   recording,
   tagsActive,
   legendColor,
@@ -51,6 +56,7 @@ export function EditorToolStrip({
   const { tokens, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const variant = isDark ? 'dark' : 'light';
+  const showGem = favorite ? gemId || DEFAULT_CHERISHED_GEM : null;
 
   return (
     <View
@@ -64,10 +70,10 @@ export function EditorToolStrip({
       ]}
     >
       {TOOLS.map((t) => {
-        const activeStar = t.id === 'favorite' && favorite;
         const activeMic = t.id === 'mic' && recording;
         const activeTags = t.id === 'tags' && tagsActive;
         const activeLegend = t.id === 'legend' && !!legendColor;
+        const activeFavorite = t.id === 'favorite' && !!favorite;
         return (
           <Pressable
             key={t.id}
@@ -77,6 +83,7 @@ export function EditorToolStrip({
               activeMic && { backgroundColor: 'rgba(220, 60, 60, 0.18)', borderRadius: 20 },
               activeTags && { backgroundColor: tokens.accentSoft, borderRadius: 20 },
               activeLegend && { backgroundColor: tokens.accentSoft, borderRadius: 20 },
+              activeFavorite && { backgroundColor: tokens.accentSoft, borderRadius: 20 },
             ]}
             accessibilityLabel={activeMic ? 'Stop recording' : t.label}
             hitSlop={6}
@@ -109,17 +116,23 @@ export function EditorToolStrip({
                 }
                 size={22}
               />
+            ) : t.id === 'favorite' ? (
+              showGem ? (
+                <GemIcon gemId={showGem} size={22} />
+              ) : (
+                <Text style={[styles.icon, { color: tokens.text, fontSize: 20 }]}>☆</Text>
+              )
             ) : (
               <Text
                 style={[
                   styles.icon,
                   {
-                    color: activeStar ? tokens.favorite : tokens.text,
+                    color: tokens.text,
                     fontSize: t.id === 'title' ? 17 : 20,
                   },
                 ]}
               >
-                {activeStar ? '★' : t.icon}
+                {t.icon}
               </Text>
             )}
           </Pressable>

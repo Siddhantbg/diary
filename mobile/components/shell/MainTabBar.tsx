@@ -163,7 +163,7 @@ export function MainTabBar({ state, navigation }: BottomTabBarProps) {
           ]}
         />
         <Pressable
-          onPress={() => router.push(`/day/${toDateKey()}`)}
+          onPress={() => router.push(`/day/${toDateKey()}?mode=edit`)}
           accessibilityRole="button"
           accessibilityLabel="Add entry"
           style={({ pressed }) => [
