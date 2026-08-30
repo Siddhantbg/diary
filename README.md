@@ -85,6 +85,7 @@ Optional: enable a PIN under Settings → Privacy lock.
 4. Env vars on Render:
    - `MONGODB_URI` — Atlas connection string (database name included, e.g. `/diary`)
    - `API_SECRET` — strong random secret
+   - `GEMINI_API_KEY` — Google AI Studio key for diary writing help (fix / continue / suggest). Keep server-side only.
    - `PORT` — Render sets this automatically; code already uses `process.env.PORT`
 5. In the app Settings, set API URL to `https://your-service.onrender.com`
 

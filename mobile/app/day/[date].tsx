@@ -20,6 +20,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { DiaryEntry } from '@/lib/api';
 import { MoodSheet } from '@/components/editor/MoodSheet';
 import { GemSheet } from '@/components/editor/GemSheet';
+import { WriteAssistSheet } from '@/components/editor/WriteAssistSheet';
 import { DateTimePickerModal } from '@/components/editor/DateTimePickerModal';
 import { EditorToolStrip, ToolId } from '@/components/editor/EditorToolStrip';
 import { DEFAULT_CHERISHED_GEM } from '@/lib/gems';
@@ -187,6 +188,7 @@ export default function DayScreen() {
 
   const [moodOpen, setMoodOpen] = useState(false);
   const [gemOpen, setGemOpen] = useState(false);
+  const [assistOpen, setAssistOpen] = useState(false);
   const [timeOpen, setTimeOpen] = useState(false);
   const [dateSwitchOpen, setDateSwitchOpen] = useState(false);
   const [showTags, setShowTags] = useState(false);
@@ -1080,6 +1082,9 @@ export default function DayScreen() {
       case 'title':
         titleRef.current?.focus();
         break;
+      case 'assist':
+        setAssistOpen(true);
+        break;
       case 'legend':
         openLegendPicker();
         break;
@@ -1359,6 +1364,18 @@ export default function DayScreen() {
         value={entry.favorite ? entry.gemId || DEFAULT_CHERISHED_GEM : null}
         onClose={() => setGemOpen(false)}
         onSelect={(g) => void applyGem(g)}
+      />
+
+      <WriteAssistSheet
+        visible={assistOpen}
+        title={entry.title}
+        text={draft}
+        onClose={() => setAssistOpen(false)}
+        onApply={(next) => {
+          setDraft(next);
+          setDraftNotice(false);
+          setDirty(true);
+        }}
       />
 
       <DateTimePickerModal

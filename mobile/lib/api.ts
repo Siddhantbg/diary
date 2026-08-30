@@ -249,6 +249,14 @@ export function createApi(apiUrl: string, apiSecret: string) {
         method: 'POST',
         body: { answer, newPin },
       }),
+
+    /** Gemini writing help (server-side key). */
+    writeAssist: (body: { mode: 'fix' | 'complete' | 'suggest'; text: string; title?: string }) =>
+      request<{ mode: string; text?: string; suggestions?: string[] }>('/assist', {
+        method: 'POST',
+        body,
+      }),
+    assistStatus: () => request<{ configured: boolean; model: string }>('/assist/status'),
   };
 }
 

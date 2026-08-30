@@ -17,6 +17,7 @@ export type ToolId =
   | 'favorite'
   | 'mood'
   | 'title'
+  | 'assist'
   | 'legend'
   | 'tags'
   | 'mic';
@@ -40,6 +41,7 @@ const TOOLS: { id: ToolId; icon: string; label: string }[] = [
   { id: 'favorite', icon: '☆', label: 'Favorite' },
   { id: 'mood', icon: '☺', label: 'Mood' },
   { id: 'title', icon: 'Tt', label: 'Type' },
+  { id: 'assist', icon: '✦', label: 'Writing help' },
   { id: 'legend', icon: '', label: 'Legend' },
   { id: 'tags', icon: '', label: 'Tags' },
   { id: 'mic', icon: '', label: 'Voice note' },
@@ -152,7 +154,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
   },
   btn: {
-    width: 40,
+    width: 36,
     height: 40,
     alignItems: 'center',
     justifyContent: 'center',

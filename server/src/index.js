@@ -10,6 +10,7 @@ const { resetBucket } = require('./gridfs');
 const entriesRouter = require('./routes/entries');
 const photosRouter = require('./routes/photos');
 const lockRouter = require('./routes/lock');
+const assistRouter = require('./routes/assist');
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -23,6 +24,7 @@ app.get('/health', (_req, res) => {
   res.json({
     ok: true,
     mongo: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
+    gemini: !!(process.env.GEMINI_API_KEY || process.env.Gemini_API_KEY),
   });
 });
 
@@ -30,6 +32,7 @@ app.use(requireApiSecret);
 app.use('/entries', entriesRouter);
 app.use('/photos', photosRouter);
 app.use('/lock', lockRouter);
+app.use('/assist', assistRouter);
 
 app.use((err, _req, res, _next) => {
   console.error(err);
