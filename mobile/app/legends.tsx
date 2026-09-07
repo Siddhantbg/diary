@@ -15,7 +15,7 @@ import { fonts, radius, spacing } from '@/constants/theme';
 import { ActionSheet, SheetAction } from '@/components/ui/ActionSheet';
 import { LegendIcon } from '@/components/icons/LegendIcon';
 import { GemIcon } from '@/components/gems/GemIcon';
-import { GEMS, gemById } from '@/lib/gems';
+import { gemById } from '@/lib/gems';
 import { STICKER_FACES } from '@/lib/stickerFaces';
 import {
   addLegend,
@@ -28,7 +28,7 @@ import {
 } from '@/lib/legends';
 
 /**
- * Manage calendar legends: name, color, and gem mapping
+ * Manage calendar legends: name, color, and face mapping
  * (Entry / Cherished + custom).
  */
 export default function LegendsScreen() {
@@ -46,11 +46,6 @@ export default function LegendsScreen() {
     message?: string;
     actions: SheetAction[];
   } | null>(null);
-
-  const editingSystem = editor?.mode === 'edit'
-    ? legends.find((x) => x.id === editor.id)?.system
-    : undefined;
-  const iconCatalog = editingSystem ? STICKER_FACES : GEMS;
 
   const reload = useCallback(async () => {
     setLegends(await loadLegends());
@@ -70,12 +65,12 @@ export default function LegendsScreen() {
     });
 
   const openAdd = () => {
-    const gem = GEMS[Math.floor(Math.random() * GEMS.length)];
+    const face = STICKER_FACES[Math.floor(Math.random() * STICKER_FACES.length)];
     setEditor({
       mode: 'add',
       name: '',
-      color: gem.tint,
-      gemId: gem.id,
+      color: face.tint,
+      gemId: face.id,
     });
   };
 
@@ -163,7 +158,7 @@ export default function LegendsScreen() {
             size={40}
           />
           <Text style={[styles.heroSub, { color: tokens.textMuted }]}>
-            Map a face for Entry / Cherished, or a gem for a custom legend. Color tints the label text.
+            Pick a face for each legend. Color tints the label text on the calendar.
           </Text>
         </View>
 
@@ -189,7 +184,7 @@ export default function LegendsScreen() {
                   : l.system === 'cherished'
                     ? 'Cherished entries'
                     : 'Custom · tap to edit'}
-                {l.gemId ? ` · ${gemById(l.gemId)?.name ?? 'Gem'}` : ''}
+                {l.gemId ? ` · ${gemById(l.gemId)?.name ?? 'Face'}` : ''}
               </Text>
             </View>
             <Text style={{ color: tokens.textSubtle, fontSize: 18 }}>›</Text>
@@ -266,11 +261,9 @@ export default function LegendsScreen() {
                 maxLength={40}
               />
 
-              <Text style={[styles.colorLabel, { color: tokens.textMuted }]}>
-                {editingSystem ? 'Face' : 'Gem'}
-              </Text>
+              <Text style={[styles.colorLabel, { color: tokens.textMuted }]}>Face</Text>
               <View style={styles.gemGrid}>
-                {iconCatalog.map((g) => {
+                {STICKER_FACES.map((g) => {
                   const on = editor?.gemId === g.id;
                   return (
                     <Pressable
