@@ -114,6 +114,27 @@ Restart Expo after editing `mobile/.env`.
 
 Secrets stay in `.env` / `.env.realcredentials` — never commit them.
 
+## Google Sign-in (Mine) + Drive backup
+
+Mine → **Sign in with Google** and Backup & Restore share one Gmail session (Drive scope included).
+
+1. In [Google Cloud Console](https://console.cloud.google.com/), create/select a project.
+2. Enable **Google Drive API**.
+3. Configure the **OAuth consent screen**.
+4. Create credentials → **OAuth client ID** → type **Web application**.
+5. Under **Authorized redirect URIs**, add exactly:
+   `https://diary-api-2xnl.onrender.com/oauth/google/callback`  
+   (Do **not** use `diary://oauth` — Google blocks custom schemes on Web clients.)
+6. Create `mobile/.env` from `mobile/.env.example` and set:
+
+```env
+EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID=your-web-client-id.apps.googleusercontent.com
+```
+
+7. Deploy/restart the API so `/oauth/google/callback` exists, then restart Expo: `cd mobile && npx expo start -c`
+
+Then open **Mine → Sign in with Google**. Backup uses that same account.
+
 ## Cloud settings backup
 
 Preferences, theme, legends, unsaved drafts, day-gem map, and Drive backup prefs sync to Mongo via `GET/PUT /settings`.

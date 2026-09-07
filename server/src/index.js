@@ -29,6 +29,24 @@ app.get('/health', (_req, res) => {
   });
 });
 
+/**
+ * Public HTTPS redirect target for Google OAuth (Expo AuthSession / Expo Go).
+ * Google rejects custom schemes like diary:// on Web clients; AuthSession
+ * captures this HTTPS callback URL when the browser lands here.
+ */
+app.get('/oauth/google/callback', (_req, res) => {
+  res
+    .status(200)
+    .type('html')
+    .send(
+      '<!doctype html><html><head><meta charset="utf-8"/><title>Signing in…</title></head>' +
+        '<body style="font-family:system-ui;padding:2rem;text-align:center">' +
+        '<p>Returning to Diary…</p>' +
+        '<p style="color:#666;font-size:14px">You can close this window if the app does not reopen.</p>' +
+        '</body></html>'
+    );
+});
+
 app.use(requireApiSecret);
 app.use('/entries', entriesRouter);
 app.use('/photos', photosRouter);

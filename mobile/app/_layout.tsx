@@ -17,6 +17,7 @@ import 'react-native-reanimated';
 import { SettingsProvider } from '@/context/SettingsContext';
 import { PreferencesProvider } from '@/context/PreferencesContext';
 import { ThemeProvider, useTheme } from '@/context/ThemeContext';
+import { GoogleAccountProvider } from '@/context/GoogleAccountContext';
 import { PinGate } from '@/components/PinGate';
 import { SetDiaryLockPrompt } from '@/components/lock/SetDiaryLockPrompt';
 import { BackupAutoScheduler } from '@/components/lock/BackupAutoScheduler';
@@ -52,11 +53,13 @@ export default function RootLayout() {
     <ThemeProvider>
       <SettingsProvider>
         <PreferencesProvider>
-          <PinGate>
-            <ThemedStack />
-            <SetDiaryLockPrompt />
-            <BackupAutoScheduler />
-          </PinGate>
+          <GoogleAccountProvider>
+            <PinGate>
+              <ThemedStack />
+              <SetDiaryLockPrompt />
+              <BackupAutoScheduler />
+            </PinGate>
+          </GoogleAccountProvider>
         </PreferencesProvider>
       </SettingsProvider>
     </ThemeProvider>

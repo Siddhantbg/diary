@@ -40,4 +40,6 @@ ios/
 coverage/
 .turbo/
 render-create.json
+client_secret_*.json
+**/client_secret_*.json
 

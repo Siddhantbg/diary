@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Image,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -11,7 +12,8 @@ import {
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useSettings } from '@/context/SettingsContext';
 import { useTheme } from '@/context/ThemeContext';
-import { DayMarker, DiaryEntry, Stats } from '@/lib/api';
+import { useGoogleAccount } from '@/context/GoogleAccountContext';
+import { DayMarker, DiaryEntry, Stats, friendlyApiMessage } from '@/lib/api';
 import { fonts, radius, spacing } from '@/constants/theme';
 import { MOOD_COLORS, MOOD_IDS, shiftDateKey, toDateKey } from '@/lib/dates';
 import { MoodFace } from '@/components/mood/MoodFace';
@@ -55,6 +57,14 @@ type Achievement = {
 export default function MineScreen() {
   const { api } = useSettings();
   const { tokens, isDark } = useTheme();
+  const {
+    account,
+    signingIn,
+    signInWithGoogle,
+    signOutGoogle,
+    refreshAccount,
+    configured,
+  } = useGoogleAccount();
   const router = useRouter();
 
   const [stats, setStats] = useState<Stats | null>(null);
@@ -167,7 +177,8 @@ export default function MineScreen() {
   useFocusEffect(
     useCallback(() => {
       void load({ soft: true });
-    }, [load])
+      void refreshAccount();
+    }, [load, refreshAccount])
   );
 
   const moodInsights = useMemo(
@@ -216,6 +227,53 @@ export default function MineScreen() {
       actions: [{ key: 'ok', label: 'Got it', icon: '✓', onPress: () => undefined }],
     });
 
+  const onGoogleProfilePress = () => {
+    if (signingIn) return;
+    if (account) {
+      setSheet({
+        title: account.email,
+        message:
+          'This Google account is used for Drive backup. Sign out to connect a different Gmail.',
+        actions: [
+          {
+            key: 'backup',
+            label: 'Backup & Restore',
+            icon: '☁',
+            onPress: () => router.push('/backup-restore'),
+          },
+          {
+            key: 'out',
+            label: 'Sign out of Google',
+            icon: '⎋',
+            destructive: true,
+            onPress: () => {
+              void signOutGoogle();
+            },
+          },
+        ],
+      });
+      return;
+    }
+    if (!configured) {
+      notice(
+        'Google not configured',
+        'Add EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID to mobile/.env (OAuth Web client). In Google Cloud, add redirect URI https://diary-api-2xnl.onrender.com/oauth/google/callback, then restart Expo.'
+      );
+      return;
+    }
+    void (async () => {
+      try {
+        const profile = await signInWithGoogle();
+        notice(
+          'Signed in',
+          `${profile.email} is connected. Backup & Restore uses this same Google Drive account.`
+        );
+      } catch (e) {
+        notice('Google sign-in', e instanceof Error ? e.message : friendlyApiMessage(e));
+      }
+    })();
+  };
+
   if (loading) {
     return (
       <View style={[styles.center, { backgroundColor: tokens.bg }]}>
@@ -240,21 +298,36 @@ export default function MineScreen() {
         />
       }
     >
-      {/* Sign-in stub */}
-      <View style={styles.profileRow}>
+      {/* Google Sign-in — same account used for Drive backup */}
+      <Pressable onPress={onGoogleProfilePress} style={styles.profileRow}>
         <View style={[styles.avatar, { backgroundColor: tokens.bgElevated, borderColor: tokens.line }]}>
-          <GemIcon gemId="gem-06" size={34} />
-          <View style={[styles.avatarPlus, { backgroundColor: tokens.accent }]}>
-            <Text style={{ color: '#fff', fontSize: 11, fontFamily: fonts.bodyMedium }}>+</Text>
-          </View>
+          {account?.picture ? (
+            <Image source={{ uri: account.picture }} style={styles.avatarImg} />
+          ) : (
+            <GemIcon gemId="gem-06" size={34} />
+          )}
+          {!account ? (
+            <View style={[styles.avatarPlus, { backgroundColor: tokens.accent }]}>
+              <Text style={{ color: '#fff', fontSize: 11, fontFamily: fonts.bodyMedium }}>+</Text>
+            </View>
+          ) : null}
         </View>
         <View style={{ flex: 1 }}>
-          <Text style={[styles.signIn, { color: tokens.text }]}>Sign in</Text>
+          <Text style={[styles.signIn, { color: tokens.text }]}>
+            {signingIn
+              ? 'Signing in…'
+              : account?.name || account?.email || 'Sign in with Google'}
+          </Text>
           <Text style={{ fontFamily: fonts.body, color: tokens.textMuted, fontSize: 13 }}>
-            Each day provides its own gifts.
+            {account
+              ? account.name
+                ? account.email
+                : 'Connected for Drive backup'
+              : 'Connect Gmail for Drive backup'}
           </Text>
         </View>
-      </View>
+        {signingIn ? <ActivityIndicator color={tokens.accent} /> : null}
+      </Pressable>
 
       {!!error && (
         <Text style={{ color: tokens.danger, marginBottom: spacing.md, fontFamily: fonts.body }}>
@@ -647,6 +720,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: StyleSheet.hairlineWidth,
+    overflow: 'hidden',
+  },
+  avatarImg: {
+    width: 56,
+    height: 56,
   },
   avatarPlus: {
     position: 'absolute',

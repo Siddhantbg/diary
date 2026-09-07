@@ -5,6 +5,7 @@ import * as SecureStore from 'expo-secure-store';
 import * as FileSystem from 'expo-file-system/legacy';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
+  API_URL,
   GOOGLE_ANDROID_CLIENT_ID,
   GOOGLE_IOS_CLIENT_ID,
   GOOGLE_WEB_CLIENT_ID,
@@ -21,6 +22,14 @@ const ACCOUNT_KEY = 'mydiary_gdrive_account_json';
 const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
 const PROFILE_SCOPES = ['openid', 'profile', 'email'];
 
+/**
+ * Google blocks custom schemes (diary://) on Web OAuth clients.
+ * Use a fixed HTTPS callback on the Diary API instead (AuthSession captures it).
+ */
+export function googleOAuthRedirectUri(): string {
+  return `${API_URL}/oauth/google/callback`;
+}
+
 export type GoogleAccount = {
   email: string;
   name?: string;
@@ -28,7 +37,7 @@ export type GoogleAccount = {
 };
 
 export function isGoogleConfigured(): boolean {
-  return !!(GOOGLE_WEB_CLIENT_ID || GOOGLE_ANDROID_CLIENT_ID || GOOGLE_IOS_CLIENT_ID);
+  return !!GOOGLE_WEB_CLIENT_ID;
 }
 
 /** Expo Google provider throws if platform client id is `undefined` — never omit it. */
@@ -36,25 +45,17 @@ const PLACEHOLDER_CLIENT_ID =
   '000000000000-placeholder.apps.googleusercontent.com';
 
 export function useGoogleDriveAuthRequest() {
-  const redirectUri = AuthSession.makeRedirectUri({
-    scheme: 'diary',
-    path: 'oauth',
-  });
+  const redirectUri = googleOAuthRedirectUri();
 
-  const web =
-    GOOGLE_WEB_CLIENT_ID ||
-    GOOGLE_ANDROID_CLIENT_ID ||
-    GOOGLE_IOS_CLIENT_ID ||
-    PLACEHOLDER_CLIENT_ID;
-  // Must be defined on Android/iOS or useAuthRequest crashes the screen.
-  const android = GOOGLE_ANDROID_CLIENT_ID || GOOGLE_WEB_CLIENT_ID || web;
-  const ios = GOOGLE_IOS_CLIENT_ID || GOOGLE_WEB_CLIENT_ID || web;
+  // Browser OAuth in Expo Go must use the Web client + HTTPS redirect.
+  // Android/iOS native client IDs are for store / dev builds with native Google Sign-In.
+  const web = GOOGLE_WEB_CLIENT_ID || PLACEHOLDER_CLIENT_ID;
 
   return Google.useAuthRequest({
     clientId: web,
     webClientId: web,
-    androidClientId: android,
-    iosClientId: ios,
+    androidClientId: web,
+    iosClientId: GOOGLE_IOS_CLIENT_ID || web,
     scopes: [...PROFILE_SCOPES, DRIVE_SCOPE],
     redirectUri,
     extraParams: {

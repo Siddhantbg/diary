@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -8,9 +8,10 @@ import {
   Text,
   View,
 } from 'react-native';
-import { Stack } from 'expo-router';
+import { Stack, useFocusEffect } from 'expo-router';
 import { useSettings } from '@/context/SettingsContext';
 import { useTheme } from '@/context/ThemeContext';
+import { useGoogleAccount } from '@/context/GoogleAccountContext';
 import { fonts, spacing } from '@/constants/theme';
 import { ActionSheet, SheetAction } from '@/components/ui/ActionSheet';
 import { friendlyApiMessage } from '@/lib/api';
@@ -26,27 +27,24 @@ import {
   setBackupReminderDays,
   type BackupProgress,
 } from '@/lib/backupRestore';
-import {
-  clearGoogleAuth,
-  fetchGoogleUser,
-  getAccessToken,
-  isGoogleConfigured,
-  loadSavedAccount,
-  saveGoogleAuth,
-  type GoogleAccount,
-  useGoogleDriveAuthRequest,
-} from '@/lib/googleDrive';
+import { getAccessToken } from '@/lib/googleDrive';
 
 /**
  * Backup and Restore — Google Drive (drive.file).
- * No PRO crown. Full text + media backup into app folder on Drive.
+ * Uses the same Google account as Mine → Sign in with Google.
  */
 export default function BackupRestoreScreen() {
   const { api } = useSettings();
   const { tokens } = useTheme();
-  const [request, response, promptAsync] = useGoogleDriveAuthRequest();
+  const {
+    account,
+    configured,
+    signingIn,
+    signInWithGoogle,
+    signOutGoogle,
+    refreshAccount,
+  } = useGoogleAccount();
 
-  const [account, setAccount] = useState<GoogleAccount | null>(null);
   const [lastBackup, setLastBackup] = useState<string | null>(null);
   const [auto, setAuto] = useState(false);
   const [reminderDays, setReminderDays] = useState<ReminderDays>(3);
@@ -59,40 +57,22 @@ export default function BackupRestoreScreen() {
   } | null>(null);
 
   const refreshMeta = useCallback(async () => {
-    const [acc, last, ab, days, token] = await Promise.all([
-      loadSavedAccount(),
+    const [last, ab, days] = await Promise.all([
       getLastBackupAt(),
       getAutoBackup(),
       getBackupReminderDays(),
-      getAccessToken(),
     ]);
-    setAccount(token ? acc : null);
     setLastBackup(last);
     setAuto(ab);
     setReminderDays(days);
-  }, []);
+    await refreshAccount();
+  }, [refreshAccount]);
 
-  useEffect(() => {
-    void refreshMeta();
-  }, [refreshMeta]);
-
-  // response effect kept as secondary path when auth resolves via hook alone
-  useEffect(() => {
-    if (response?.type !== 'success' || !response.authentication?.accessToken) return;
-    void (async () => {
-      try {
-        if (await getAccessToken()) {
-          const profile =
-            (await loadSavedAccount()) ||
-            (await fetchGoogleUser(response.authentication!.accessToken!));
-          await saveGoogleAuth(response.authentication!, profile);
-          setAccount(profile);
-        }
-      } catch {
-        // primary login path handles errors
-      }
-    })();
-  }, [response]);
+  useFocusEffect(
+    useCallback(() => {
+      void refreshMeta();
+    }, [refreshMeta])
+  );
 
   const notice = (title: string, message: string) =>
     setSheet({
@@ -104,32 +84,19 @@ export default function BackupRestoreScreen() {
   const help = () =>
     notice(
       'Backup & Restore',
-      'Backups are stored in your Google Drive under “MyDiary Backups”. We use the drive.file scope so the app only sees files it creates. Diary text, moods, tags, moments, photos, and voice notes are included. Diary PIN stays on this device and is never uploaded.'
+      'Sign in with Google on Mine (or here). Backups go to Drive under “MyDiary Backups”. The app only sees files it creates (drive.file). Diary PIN stays on this device.'
     );
 
   const login = async (): Promise<boolean> => {
-    if (!isGoogleConfigured()) {
+    if (!configured) {
       notice(
         'Google not configured',
-        'Add EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID to mobile/.env from Google Cloud Console (OAuth Web client), then restart Expo. Enable Google Drive API on the project and add your redirect URI.'
+        'Add EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID to mobile/.env (OAuth Web client), then restart Expo. Enable Google Drive API and add redirect URI https://diary-api-2xnl.onrender.com/oauth/google/callback.'
       );
       return false;
     }
-    if (!request) {
-      notice('Please wait', 'Google sign-in is still preparing…');
-      return false;
-    }
-    const result = await promptAsync();
-    if (result.type !== 'success' || !result.authentication?.accessToken) {
-      if (result.type === 'error') {
-        notice('Google login failed', result.error?.message || 'Sign-in was cancelled or failed.');
-      }
-      return false;
-    }
     try {
-      const profile = await fetchGoogleUser(result.authentication.accessToken);
-      await saveGoogleAuth(result.authentication, profile);
-      setAccount(profile);
+      await signInWithGoogle();
       return true;
     } catch (e: unknown) {
       notice('Google login failed', e instanceof Error ? e.message : friendlyApiMessage(e));
@@ -208,7 +175,7 @@ export default function BackupRestoreScreen() {
 
   const onToggleAuto = async (on: boolean) => {
     if (on && !(await getAccessToken())) {
-      notice('Sign in first', 'Connect Google Drive before enabling Auto Backup.');
+      notice('Sign in first', 'Connect Google on Mine (or tap above) before enabling Auto Backup.');
       return;
     }
     await setAutoBackup(on);
@@ -244,8 +211,8 @@ export default function BackupRestoreScreen() {
     setSheet({
       title: 'Backup account',
       message: account
-        ? `Signed in as ${account.email}. You can sign out and connect a different Google account.`
-        : 'No Google account connected yet.',
+        ? `Signed in as ${account.email}. Same account as Mine → Sign in with Google.`
+        : 'No Google account connected yet. Sign in on Mine or here.',
       actions: [
         ...(account
           ? [
@@ -255,8 +222,7 @@ export default function BackupRestoreScreen() {
                 icon: '⎋',
                 destructive: true,
                 onPress: () => {
-                  void clearGoogleAuth().then(() => {
-                    setAccount(null);
+                  void signOutGoogle().then(() => {
                     void setAutoBackup(false);
                     setAuto(false);
                   });
@@ -267,10 +233,7 @@ export default function BackupRestoreScreen() {
                 label: 'Switch account',
                 icon: '⇄',
                 onPress: () => {
-                  void clearGoogleAuth().then(() => {
-                    setAccount(null);
-                    void login();
-                  });
+                  void signOutGoogle().then(() => void login());
                 },
               },
             ]
@@ -312,9 +275,9 @@ export default function BackupRestoreScreen() {
       />
 
       <ScrollView contentContainerStyle={styles.content}>
-        {/* Google account header */}
         <Pressable
           onPress={() => void (account ? moreAccount() : login())}
+          disabled={signingIn}
           style={[styles.accountRow, { borderBottomColor: tokens.line }]}
         >
           <View style={[styles.gBadge, { backgroundColor: tokens.bgElevated, borderColor: tokens.line }]}>
@@ -323,7 +286,11 @@ export default function BackupRestoreScreen() {
           <View style={{ flex: 1 }}>
             <Text style={[styles.rowTitle, { color: tokens.text }]}>Backup to Google Drive</Text>
             <Text style={[styles.rowSub, { color: tokens.textMuted }]}>
-              {account ? account.email : 'Tap to login'}
+              {signingIn
+                ? 'Signing in…'
+                : account
+                  ? account.email
+                  : 'Tap to login (same as Mine)'}
             </Text>
           </View>
         </Pressable>
@@ -363,18 +330,12 @@ export default function BackupRestoreScreen() {
           <Text style={[styles.rowTitle, { color: tokens.text }]}>Restore Data</Text>
         </Pressable>
 
-        <Pressable
-          onPress={moreAccount}
-          style={[styles.row, { borderBottomColor: tokens.line }]}
-        >
+        <Pressable onPress={moreAccount} style={[styles.row, { borderBottomColor: tokens.line }]}>
           <Text style={[styles.rowTitle, { color: tokens.text, flex: 1 }]}>More Backup Account</Text>
           <Text style={{ color: tokens.textSubtle, fontSize: 18 }}>›</Text>
         </Pressable>
 
-        <Pressable
-          onPress={pickReminder}
-          style={[styles.row, { borderBottomColor: tokens.line }]}
-        >
+        <Pressable onPress={pickReminder} style={[styles.row, { borderBottomColor: tokens.line }]}>
           <View style={{ flex: 1 }}>
             <Text style={[styles.rowTitle, { color: tokens.text }]}>Backup Reminder</Text>
             <Text style={[styles.rowSub, { color: tokens.textMuted }]}>
@@ -389,9 +350,7 @@ export default function BackupRestoreScreen() {
             {progress ? (
               <Text style={[styles.progressText, { color: tokens.textMuted }]}>
                 {progress.phase}
-                {progress.total > 1
-                  ? ` (${progress.current}/${progress.total})`
-                  : ''}
+                {progress.total > 1 ? ` (${progress.current}/${progress.total})` : ''}
               </Text>
             ) : (
               <Text style={[styles.progressText, { color: tokens.textMuted }]}>Working…</Text>
@@ -400,8 +359,8 @@ export default function BackupRestoreScreen() {
         ) : null}
 
         <Text style={[styles.footer, { color: tokens.textSubtle }]}>
-          Backups use Google’s drive.file permission — only the MyDiary Backups folder created by
-          this app. Configure EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID for sign-in.
+          Sign in once on Mine; Backup uses that same Gmail. Needs EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID
+          in mobile/.env.
         </Text>
       </ScrollView>
 
