@@ -106,6 +106,8 @@ export async function loadLegends(): Promise<DiaryLegend[]> {
 export async function saveLegends(list: DiaryLegend[]): Promise<void> {
   const next = normalize(list);
   await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+  const { scheduleSettingsPush } = await import('@/lib/settingsSync');
+  scheduleSettingsPush();
 }
 
 export async function addLegend(

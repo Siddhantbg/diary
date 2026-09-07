@@ -89,12 +89,14 @@ export async function saveEntryDraft(date: string, draft: EntryDraft): Promise<v
     if (!date) return;
     if (isDraftEmpty(draft)) {
       await AsyncStorage.removeItem(key(date));
-      return;
+    } else {
+      await AsyncStorage.setItem(
+        key(date),
+        JSON.stringify({ ...draft, updatedAt: Date.now() })
+      );
     }
-    await AsyncStorage.setItem(
-      key(date),
-      JSON.stringify({ ...draft, updatedAt: Date.now() })
-    );
+    const { scheduleSettingsPush } = await import('@/lib/settingsSync');
+    scheduleSettingsPush();
   } catch {
     // Best-effort only — never block writing UI
   }
@@ -104,6 +106,8 @@ export async function clearEntryDraft(date: string): Promise<void> {
   try {
     if (!date) return;
     await AsyncStorage.removeItem(key(date));
+    const { scheduleSettingsPush } = await import('@/lib/settingsSync');
+    scheduleSettingsPush();
   } catch {
     // ignore
   }

@@ -257,6 +257,38 @@ export function createApi(apiUrl: string, apiSecret: string) {
         body,
       }),
     assistStatus: () => request<{ configured: boolean; model: string }>('/assist/status'),
+
+    /** Cloud mirror of prefs / theme / legends / drafts / backup prefs. */
+    getSettings: () =>
+      request<{
+        preferences: Record<string, unknown>;
+        themeId: string;
+        legends: unknown[];
+        dayGems: Record<string, string>;
+        drafts: Record<string, unknown>;
+        backup: { autoBackup: boolean; reminderDays: number; lastBackupAt: string };
+        updatedAt: string | null;
+        createdAt: string | null;
+        hasContent: boolean;
+      }>('/settings'),
+    putSettings: (body: {
+      preferences?: Record<string, unknown>;
+      themeId?: string;
+      legends?: unknown[];
+      dayGems?: Record<string, string>;
+      drafts?: Record<string, unknown>;
+      backup?: { autoBackup?: boolean; reminderDays?: number; lastBackupAt?: string };
+    }) =>
+      request<{
+        preferences: Record<string, unknown>;
+        themeId: string;
+        legends: unknown[];
+        dayGems: Record<string, string>;
+        drafts: Record<string, unknown>;
+        backup: { autoBackup: boolean; reminderDays: number; lastBackupAt: string };
+        updatedAt: string | null;
+        hasContent: boolean;
+      }>('/settings', { method: 'PUT', body }),
   };
 }
 

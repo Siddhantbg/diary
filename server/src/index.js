@@ -11,6 +11,7 @@ const entriesRouter = require('./routes/entries');
 const photosRouter = require('./routes/photos');
 const lockRouter = require('./routes/lock');
 const assistRouter = require('./routes/assist');
+const settingsRouter = require('./routes/settings');
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -18,7 +19,7 @@ const PORT = process.env.PORT || 4000;
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 app.use(cors());
 app.use(morgan('dev'));
-app.use(express.json({ limit: '2mb' }));
+app.use(express.json({ limit: '4mb' }));
 
 app.get('/health', (_req, res) => {
   res.json({
@@ -33,6 +34,7 @@ app.use('/entries', entriesRouter);
 app.use('/photos', photosRouter);
 app.use('/lock', lockRouter);
 app.use('/assist', assistRouter);
+app.use('/settings', settingsRouter);
 
 app.use((err, _req, res, _next) => {
   console.error(err);

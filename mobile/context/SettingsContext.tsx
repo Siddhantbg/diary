@@ -14,6 +14,10 @@ import {
   verifySecurityAnswer,
 } from '@/lib/config';
 import { warmDiaryApi } from '@/lib/apiWarmup';
+import {
+  bindSettingsApi,
+  hydrateSettingsFromCloud,
+} from '@/lib/settingsSync';
 
 type SettingsContextValue = {
   ready: boolean;
@@ -76,15 +80,19 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     [config.apiUrl, config.apiSecret]
   );
 
+  useEffect(() => {
+    bindSettingsApi(() => api);
+  }, [api]);
+
   /** Soft sync from server when online (prefer local PIN as source of truth for unlocking). */
   const syncFromServer = useCallback(async () => {
     try {
-      const remote = await api.getLock();
-      // If server has lock and device doesn't, don't steal PIN — only fill recovery metadata
-      if (remote.hasSecurityQuestion && remote.securityQuestion) {
-        // question is public; don't overwrite blank local without hashes
-      }
-      // Keep local pinEnabled as device gate; after enable both match
+      await api.getLock();
+    } catch {
+      // offline ok
+    }
+    try {
+      await hydrateSettingsFromCloud(api);
     } catch {
       // offline ok
     }

@@ -25,20 +25,38 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [themeId, setThemeIdState] = useState(DEFAULT_THEME_ID);
 
   useEffect(() => {
+    let cancelled = false;
     (async () => {
       try {
         const stored = await AsyncStorage.getItem(STORAGE_KEY);
-        if (stored) setThemeIdState(stored);
+        if (stored && !cancelled) setThemeIdState(stored);
       } finally {
-        setReady(true);
+        if (!cancelled) setReady(true);
       }
     })();
+
+    let unsub: (() => void) | undefined;
+    void import('@/lib/settingsSync').then(({ onSettingsHydrated }) => {
+      unsub = onSettingsHydrated(() => {
+        void (async () => {
+          const stored = await AsyncStorage.getItem(STORAGE_KEY);
+          if (stored) setThemeIdState(stored);
+        })();
+      });
+    });
+
+    return () => {
+      cancelled = true;
+      unsub?.();
+    };
   }, []);
 
   const setThemeId = useCallback(async (id: string) => {
     const next = getThemeById(id);
     setThemeIdState(next.id);
     await AsyncStorage.setItem(STORAGE_KEY, next.id);
+    const { scheduleSettingsPush } = await import('@/lib/settingsSync');
+    scheduleSettingsPush();
   }, []);
 
   const tokens = useMemo(() => getThemeById(themeId), [themeId]);

@@ -34,6 +34,8 @@ export async function setDayGem(date: string, gemId: string | null): Promise<voi
     if (id) all[date] = id;
     else delete all[date];
     await AsyncStorage.setItem(KEY, JSON.stringify(all));
+    const { scheduleSettingsPush } = await import('@/lib/settingsSync');
+    scheduleSettingsPush();
   } catch {
     // best-effort
   }

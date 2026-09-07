@@ -213,6 +213,8 @@ export async function backupAllToDrive(
   );
 
   await AsyncStorage.setItem(LAST_BACKUP_KEY, exportedAt);
+  const { scheduleSettingsPush } = await import('@/lib/settingsSync');
+  scheduleSettingsPush();
   return {
     exportedAt,
     entryCount: entries.length,
@@ -335,6 +337,8 @@ export async function getLastBackupAt(): Promise<string | null> {
 
 export async function setAutoBackup(on: boolean) {
   await AsyncStorage.setItem(AUTO_BACKUP_KEY, on ? '1' : '0');
+  const { scheduleSettingsPush } = await import('@/lib/settingsSync');
+  scheduleSettingsPush();
 }
 
 export async function getAutoBackup(): Promise<boolean> {
@@ -345,6 +349,8 @@ export type ReminderDays = 1 | 3 | 7 | 14;
 
 export async function setBackupReminderDays(days: ReminderDays) {
   await AsyncStorage.setItem(REMINDER_DAYS_KEY, String(days));
+  const { scheduleSettingsPush } = await import('@/lib/settingsSync');
+  scheduleSettingsPush();
 }
 
 export async function getBackupReminderDays(): Promise<ReminderDays> {

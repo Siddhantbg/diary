@@ -49,25 +49,49 @@ export function PreferencesProvider({ children }: { children: React.ReactNode })
   const [ready, setReady] = useState(false);
   const [prefs, setPrefsState] = useState<AppPreferences>(DEFAULT_PREFERENCES);
 
+  const persist = useCallback(async (next: AppPreferences) => {
+    setPrefsState(next);
+    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    const { scheduleSettingsPush } = await import('@/lib/settingsSync');
+    scheduleSettingsPush();
+  }, []);
+
   useEffect(() => {
+    let cancelled = false;
     (async () => {
       try {
         const raw = await AsyncStorage.getItem(STORAGE_KEY);
         if (raw) {
           const parsed = JSON.parse(raw) as Partial<AppPreferences>;
-          setPrefsState({ ...DEFAULT_PREFERENCES, ...parsed });
+          if (!cancelled) setPrefsState({ ...DEFAULT_PREFERENCES, ...parsed });
         }
       } catch {
         // keep defaults
       } finally {
-        setReady(true);
+        if (!cancelled) setReady(true);
       }
     })();
-  }, []);
 
-  const persist = useCallback(async (next: AppPreferences) => {
-    setPrefsState(next);
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    let unsub: (() => void) | undefined;
+    void import('@/lib/settingsSync').then(({ onSettingsHydrated }) => {
+      unsub = onSettingsHydrated(() => {
+        void (async () => {
+          try {
+            const raw = await AsyncStorage.getItem(STORAGE_KEY);
+            if (!raw) return;
+            const parsed = JSON.parse(raw) as Partial<AppPreferences>;
+            setPrefsState({ ...DEFAULT_PREFERENCES, ...parsed });
+          } catch {
+            // ignore
+          }
+        })();
+      });
+    });
+
+    return () => {
+      cancelled = true;
+      unsub?.();
+    };
   }, []);
 
   const setPref = useCallback(
