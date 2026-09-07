@@ -79,13 +79,15 @@ export function GoogleAccountProvider({ children }: { children: React.ReactNode 
     setSigningIn(true);
     try {
       const result = await promptAsync();
-      if (result.type !== 'success' || !result.authentication?.accessToken) {
+      if (result.type !== 'success' || !('authentication' in result) || !result.authentication?.accessToken) {
         if (result.type === 'dismiss' || result.type === 'cancel') {
           throw new Error('Google sign-in was cancelled.');
         }
-        throw new Error(
-          ('error' in result && result.error?.message) || 'Google sign-in failed.'
-        );
+        const errMsg =
+          'error' in result && result.error && typeof result.error === 'object' && 'message' in result.error
+            ? String((result.error as { message?: string }).message || '')
+            : '';
+        throw new Error(errMsg || 'Google sign-in failed.');
       }
       const profile = await fetchGoogleUser(result.authentication.accessToken);
       await saveGoogleAuth(result.authentication, profile);

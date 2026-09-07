@@ -4,6 +4,7 @@ import * as WebBrowser from 'expo-web-browser';
 import * as SecureStore from 'expo-secure-store';
 import * as FileSystem from 'expo-file-system/legacy';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useCallback, useMemo } from 'react';
 import {
   API_URL,
   GOOGLE_ANDROID_CLIENT_ID,
@@ -24,10 +25,19 @@ const PROFILE_SCOPES = ['openid', 'profile', 'email'];
 
 /**
  * Google blocks custom schemes (diary://) on Web OAuth clients.
- * Use a fixed HTTPS callback on the Diary API instead (AuthSession captures it).
+ * Use a fixed HTTPS callback on the Diary API; the API then redirects into
+ * the app deep link so the in-app browser can dismiss (Expo Go / Android).
  */
 export function googleOAuthRedirectUri(): string {
   return `${API_URL}/oauth/google/callback`;
+}
+
+/** Deep link the browser must return to (exp:// in Expo Go, diary:// in builds). */
+export function googleAppReturnUri(): string {
+  return AuthSession.makeRedirectUri({
+    scheme: 'diary',
+    path: 'oauth',
+  });
 }
 
 export type GoogleAccount = {
@@ -45,24 +55,83 @@ const PLACEHOLDER_CLIENT_ID =
   '000000000000-placeholder.apps.googleusercontent.com';
 
 export function useGoogleDriveAuthRequest() {
-  const redirectUri = googleOAuthRedirectUri();
-
-  // Browser OAuth in Expo Go must use the Web client + HTTPS redirect.
-  // Android/iOS native client IDs are for store / dev builds with native Google Sign-In.
+  const httpsRedirect = googleOAuthRedirectUri();
+  const appReturnUri = googleAppReturnUri();
   const web = GOOGLE_WEB_CLIENT_ID || PLACEHOLDER_CLIENT_ID;
 
-  return Google.useAuthRequest({
+  // Encode return deep link in OAuth state so the API can bounce back into the app.
+  // Format: <nonce>~<encodeURIComponent(appReturnUri)>
+  const oauthState = useMemo(() => {
+    const nonce = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+    return `${nonce}~${encodeURIComponent(appReturnUri)}`;
+  }, [appReturnUri]);
+
+  const [request, response] = Google.useAuthRequest({
     clientId: web,
     webClientId: web,
     androidClientId: web,
     iosClientId: GOOGLE_IOS_CLIENT_ID || web,
     scopes: [...PROFILE_SCOPES, DRIVE_SCOPE],
-    redirectUri,
+    redirectUri: httpsRedirect,
+    state: oauthState,
     extraParams: {
       access_type: 'offline',
       prompt: 'consent',
     },
   });
+
+  const promptAsync = useCallback(async () => {
+    if (!request) {
+      return { type: 'error' as const, errorCode: null, params: {}, authentication: null, url: '', error: undefined };
+    }
+
+    const authUrl =
+      request.url || (await request.makeAuthUrlAsync(Google.discovery));
+
+    // Listen for the app deep link (not the HTTPS Google redirect). The API
+    // callback 302s from HTTPS → appReturnUri with the same query params.
+    const browserResult = await WebBrowser.openAuthSessionAsync(
+      authUrl,
+      appReturnUri
+    );
+
+    if (browserResult.type !== 'success' || !('url' in browserResult) || !browserResult.url) {
+      return {
+        type: browserResult.type as 'cancel' | 'dismiss' | 'locked' | 'opened',
+      };
+    }
+
+    const parsed = request.parseReturnUrl(browserResult.url);
+    if (parsed.type !== 'success') {
+      return parsed;
+    }
+
+    if (parsed.params.code && !parsed.authentication) {
+      const authentication = await AuthSession.exchangeCodeAsync(
+        {
+          clientId: web,
+          code: parsed.params.code,
+          redirectUri: httpsRedirect,
+          extraParams: {
+            code_verifier: request.codeVerifier || '',
+          },
+        },
+        Google.discovery
+      );
+      return {
+        ...parsed,
+        authentication,
+        params: {
+          ...parsed.params,
+          access_token: authentication.accessToken ?? '',
+        },
+      };
+    }
+
+    return parsed;
+  }, [request, appReturnUri, httpsRedirect, web]);
+
+  return [request, response, promptAsync] as const;
 }
 
 export async function saveGoogleAuth(

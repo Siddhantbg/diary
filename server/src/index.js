@@ -31,10 +31,37 @@ app.get('/health', (_req, res) => {
 
 /**
  * Public HTTPS redirect target for Google OAuth (Expo AuthSession / Expo Go).
- * Google rejects custom schemes like diary:// on Web clients; AuthSession
- * captures this HTTPS callback URL when the browser lands here.
+ * Google requires an https redirect for Web clients; we then bounce to the app
+ * deep link (exp:// or diary://) encoded in `state` so the in-app browser closes.
  */
-app.get('/oauth/google/callback', (_req, res) => {
+app.get('/oauth/google/callback', (req, res) => {
+  const state = typeof req.query.state === 'string' ? req.query.state : '';
+  let returnTo = '';
+  const sepIdx = state.indexOf('~');
+  if (sepIdx !== -1) {
+    try {
+      returnTo = decodeURIComponent(state.slice(sepIdx + 1));
+    } catch {
+      returnTo = '';
+    }
+  }
+
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(req.query)) {
+    if (typeof value === 'string') params.set(key, value);
+    else if (Array.isArray(value) && typeof value[0] === 'string') params.set(key, value[0]);
+  }
+
+  const safeReturn =
+    returnTo &&
+    /^(diary|exp|exps):\/\//i.test(returnTo) &&
+    !/[\s<>"]/.test(returnTo);
+
+  if (safeReturn) {
+    const joiner = returnTo.includes('?') ? '&' : '?';
+    return res.redirect(302, `${returnTo}${joiner}${params.toString()}`);
+  }
+
   res
     .status(200)
     .type('html')
@@ -42,7 +69,7 @@ app.get('/oauth/google/callback', (_req, res) => {
       '<!doctype html><html><head><meta charset="utf-8"/><title>Signing in…</title></head>' +
         '<body style="font-family:system-ui;padding:2rem;text-align:center">' +
         '<p>Returning to Diary…</p>' +
-        '<p style="color:#666;font-size:14px">You can close this window if the app does not reopen.</p>' +
+        '<p style="color:#666;font-size:14px">If the app did not open, close this window and try again.</p>' +
         '</body></html>'
     );
 });
