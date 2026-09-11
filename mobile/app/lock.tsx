@@ -21,6 +21,14 @@ import { friendlyApiMessage } from '@/lib/api';
 
 type ModalKind = 'password' | 'security' | 'email' | null;
 
+const SECURITY_PRESETS = [
+  "What was the name of your first pet?",
+  'What city were you born in?',
+  "What is your mother's maiden name?",
+  'What was your childhood nickname?',
+  'What was the name of your first school?',
+];
+
 /**
  * Set Diary Lock — toggle, password, security question, email, fingerprint.
  * PIN on device; hashed mirror + recovery metadata on API.
@@ -135,8 +143,17 @@ export default function DiaryLockScreen() {
       }
       if (!/^\d{4,8}$/.test(pin)) throw new Error('PIN must be 4–8 digits');
       if (pin !== pin2) throw new Error('PINs do not match');
-      await enablePin(pin);
-      notice('Diary Lock on', 'Your diary is now protected with a PIN.');
+      if (!question.trim() || !answer.trim()) {
+        throw new Error('Add a security question and answer so you can recover a forgotten PIN');
+      }
+      await enablePin(pin, {
+        securityQuestion: question.trim(),
+        securityAnswer: answer.trim(),
+      });
+      notice(
+        'Diary Lock on',
+        'Your diary is protected with a PIN. Forgot PIN will ask your security question.'
+      );
     }, 'Could not set password');
 
   const submitSecurity = () =>
@@ -324,6 +341,11 @@ export default function DiaryLockScreen() {
             style={[styles.sheet, { backgroundColor: tokens.bgElevated, borderColor: tokens.line }]}
             onStartShouldSetResponder={() => true}
           >
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+              style={{ maxHeight: 520 }}
+            >
             <View style={styles.sheetHead}>
               <LockIcon color={tokens.text} variant={isDark ? 'dark' : 'light'} size={24} />
               <Text style={[styles.sheetTitle, { color: tokens.text, marginBottom: 0 }]}>
@@ -397,6 +419,46 @@ export default function DiaryLockScreen() {
                   placeholder="Confirm PIN"
                   placeholderTextColor={tokens.textSubtle}
                 />
+                <Text style={[styles.sheetHint, { color: tokens.textMuted }]}>
+                  Security question (for Forgot PIN)
+                </Text>
+                <View style={styles.presetWrap}>
+                  {SECURITY_PRESETS.map((q) => {
+                    const on = question === q;
+                    return (
+                      <Pressable
+                        key={q}
+                        onPress={() => setQuestion(q)}
+                        style={[
+                          styles.presetChip,
+                          {
+                            borderColor: on ? tokens.accent : tokens.line,
+                            backgroundColor: on ? tokens.accentSoft : 'transparent',
+                          },
+                        ]}
+                      >
+                        <Text style={[styles.presetText, { color: tokens.text }]} numberOfLines={2}>
+                          {q}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+                <TextInput
+                  style={[styles.input, { color: tokens.text, borderBottomColor: tokens.line }]}
+                  value={question}
+                  onChangeText={setQuestion}
+                  placeholder="Or type your own question"
+                  placeholderTextColor={tokens.textSubtle}
+                />
+                <TextInput
+                  style={[styles.input, { color: tokens.text, borderBottomColor: tokens.line }]}
+                  value={answer}
+                  onChangeText={setAnswer}
+                  placeholder="Answer"
+                  placeholderTextColor={tokens.textSubtle}
+                  autoCapitalize="none"
+                />
               </>
             )}
 
@@ -415,6 +477,7 @@ export default function DiaryLockScreen() {
                 </Text>
               </Pressable>
             </View>
+            </ScrollView>
           </View>
         </Pressable>
       </Modal>
@@ -426,6 +489,9 @@ export default function DiaryLockScreen() {
             onStartShouldSetResponder={() => true}
           >
             <Text style={[styles.sheetTitle, { color: tokens.text }]}>Security question</Text>
+            <Text style={[styles.sheetHint, { color: tokens.textMuted }]}>
+              Used when you tap Forgot PIN on the unlock screen.
+            </Text>
             <TextInput
               style={[styles.input, { color: tokens.text, borderBottomColor: tokens.line }]}
               value={currentPin}
@@ -436,11 +502,33 @@ export default function DiaryLockScreen() {
               placeholder="Current PIN"
               placeholderTextColor={tokens.textSubtle}
             />
+            <View style={styles.presetWrap}>
+              {SECURITY_PRESETS.map((q) => {
+                const on = question === q;
+                return (
+                  <Pressable
+                    key={q}
+                    onPress={() => setQuestion(q)}
+                    style={[
+                      styles.presetChip,
+                      {
+                        borderColor: on ? tokens.accent : tokens.line,
+                        backgroundColor: on ? tokens.accentSoft : 'transparent',
+                      },
+                    ]}
+                  >
+                    <Text style={[styles.presetText, { color: tokens.text }]} numberOfLines={2}>
+                      {q}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
             <TextInput
               style={[styles.input, { color: tokens.text, borderBottomColor: tokens.line }]}
               value={question}
               onChangeText={setQuestion}
-              placeholder="e.g. First pet's name?"
+              placeholder="Or type your own question"
               placeholderTextColor={tokens.textSubtle}
             />
             <TextInput
@@ -613,6 +701,25 @@ const styles = StyleSheet.create({
     fontFamily: fonts.display,
     fontSize: 18,
     marginBottom: spacing.sm,
+  },
+  sheetHint: {
+    fontFamily: fonts.body,
+    fontSize: 13,
+    marginBottom: spacing.sm,
+  },
+  presetWrap: {
+    gap: 8,
+    marginBottom: spacing.md,
+  },
+  presetChip: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radius.md,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+  },
+  presetText: {
+    fontFamily: fonts.body,
+    fontSize: 13,
   },
   input: {
     fontFamily: fonts.body,

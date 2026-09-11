@@ -300,15 +300,17 @@ export default function MineScreen() {
     >
       {/* Google Sign-in — same account used for Drive backup */}
       <Pressable onPress={onGoogleProfilePress} style={styles.profileRow}>
-        <View style={[styles.avatar, { backgroundColor: tokens.bgElevated, borderColor: tokens.line }]}>
-          {account?.picture ? (
-            <Image source={{ uri: account.picture }} style={styles.avatarImg} />
-          ) : (
-            <GemIcon gemId="gem-06" size={34} />
-          )}
+        <View style={styles.avatarWrap}>
+          <View style={[styles.avatar, { backgroundColor: tokens.bgElevated, borderColor: tokens.line }]}>
+            {account?.picture ? (
+              <Image source={{ uri: account.picture }} style={styles.avatarImg} />
+            ) : (
+              <GemIcon gemId="gem-06" size={34} />
+            )}
+          </View>
           {!account ? (
-            <View style={[styles.avatarPlus, { backgroundColor: tokens.accent }]}>
-              <Text style={{ color: '#fff', fontSize: 11, fontFamily: fonts.bodyMedium }}>+</Text>
+            <View style={[styles.avatarPlus, { backgroundColor: tokens.accent, borderColor: tokens.bg }]}>
+              <Text style={styles.avatarPlusText}>+</Text>
             </View>
           ) : null}
         </View>
@@ -713,6 +715,10 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     marginBottom: spacing.lg,
   },
+  avatarWrap: {
+    width: 56,
+    height: 56,
+  },
   avatar: {
     width: 56,
     height: 56,
@@ -730,11 +736,19 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: -2,
     bottom: -2,
-    width: 18,
-    height: 18,
-    borderRadius: 9,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 2,
+  },
+  avatarPlusText: {
+    color: '#fff',
+    fontSize: 13,
+    lineHeight: 14,
+    fontFamily: fonts.bodyMedium,
+    marginTop: -1,
   },
   signIn: {
     fontFamily: fonts.display,

@@ -69,6 +69,13 @@ export async function saveSecurityQuestion(question: string, answer: string) {
   await SecureStore.setItemAsync(SECURITY_A_KEY, answer.trim().toLowerCase());
 }
 
+/** Cache question text from server (answer stays hashed remotely). */
+export async function cacheSecurityQuestion(question: string) {
+  const q = question.trim();
+  if (!q) return;
+  await AsyncStorage.setItem(SECURITY_Q_KEY, q);
+}
+
 export async function clearSecurityQuestion() {
   await AsyncStorage.removeItem(SECURITY_Q_KEY);
   await SecureStore.deleteItemAsync(SECURITY_A_KEY);

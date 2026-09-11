@@ -11,7 +11,13 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { Audio } from 'expo-av';
+import {
+  AudioModule,
+  RecordingPresets,
+  requestRecordingPermissionsAsync,
+  setAudioModeAsync,
+  type AudioRecorder,
+} from 'expo-audio';
 import * as ImagePicker from 'expo-image-picker';
 import { Calendar, DateData } from 'react-native-calendars';
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
@@ -216,7 +222,7 @@ export default function DayScreen() {
   const titleRef = useRef<TextInput>(null);
   const draftRef = useRef<TextInput>(null);
   const tagsRef = useRef<TextInput>(null);
-  const recordingRef = useRef<Audio.Recording | null>(null);
+  const recordingRef = useRef<AudioRecorder | null>(null);
   const recordTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const stateRef = useRef({
     entry,
@@ -401,7 +407,7 @@ export default function DayScreen() {
       const rec = recordingRef.current;
       recordingRef.current = null;
       if (rec) {
-        void rec.stopAndUnloadAsync().catch(() => undefined);
+        void rec.stop().catch(() => undefined);
       }
     };
   }, []);
@@ -747,7 +753,7 @@ export default function DayScreen() {
       return;
     }
     try {
-      const perm = await Audio.requestPermissionsAsync();
+      const perm = await requestRecordingPermissionsAsync();
       if (!perm.granted) {
         notice(
           'Microphone needed',
@@ -755,13 +761,13 @@ export default function DayScreen() {
         );
         return;
       }
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
+      await setAudioModeAsync({
+        allowsRecording: true,
+        playsInSilentMode: true,
       });
-      const { recording: rec } = await Audio.Recording.createAsync(
-        Audio.RecordingOptionsPresets.HIGH_QUALITY
-      );
+      const rec = new AudioModule.AudioRecorder(RecordingPresets.HIGH_QUALITY);
+      await rec.prepareToRecordAsync();
+      rec.record();
       recordingRef.current = rec;
       setRecording(true);
       setRecordingMs(0);
@@ -792,15 +798,15 @@ export default function DayScreen() {
     let uri: string | null = null;
     let durationMs = recordingMs;
     try {
-      const status = await rec.getStatusAsync();
-      if (status.isLoaded && typeof status.durationMillis === 'number') {
+      const status = rec.getStatus();
+      if (typeof status.durationMillis === 'number') {
         durationMs = status.durationMillis;
       }
-      await rec.stopAndUnloadAsync();
-      uri = rec.getURI();
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
-        playsInSilentModeIOS: true,
+      await rec.stop();
+      uri = rec.uri;
+      await setAudioModeAsync({
+        allowsRecording: false,
+        playsInSilentMode: true,
       });
     } catch (e: unknown) {
       notice('Mic', e instanceof Error ? e.message : 'Could not stop recording');

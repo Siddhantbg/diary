@@ -2,6 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useS
 import { createApi, DiaryApi } from '@/lib/api';
 import {
   AppConfig,
+  cacheSecurityQuestion,
   clearPin,
   clearRecoveryEmail,
   clearSecurityQuestion,
@@ -25,8 +26,11 @@ type SettingsContextValue = {
   api: DiaryApi;
   unlocked: boolean;
   refreshConfig: () => Promise<void>;
-  /** Enable lock with PIN (local + server) */
-  enablePin: (pin: string) => Promise<void>;
+  /** Enable lock with PIN (local + server). Pass recovery Q&A so Forgot PIN works. */
+  enablePin: (
+    pin: string,
+    recovery?: { securityQuestion: string; securityAnswer: string }
+  ) => Promise<void>;
   /** Change PIN when lock already on */
   changePin: (currentPin: string, nextPin: string) => Promise<void>;
   disablePin: (currentPin?: string) => Promise<void>;
@@ -84,10 +88,14 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     bindSettingsApi(() => api);
   }, [api]);
 
-  /** Soft sync from server when online (prefer local PIN as source of truth for unlocking). */
+  /** Soft sync lock recovery metadata + cloud settings. */
   const syncFromServer = useCallback(async () => {
     try {
-      await api.getLock();
+      const remote = await api.getLock();
+      if (remote.securityQuestion) {
+        await cacheSecurityQuestion(remote.securityQuestion);
+        await refreshConfig();
+      }
     } catch {
       // offline ok
     }
@@ -96,7 +104,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     } catch {
       // offline ok
     }
-  }, [api]);
+  }, [api, refreshConfig]);
 
   useEffect(() => {
     if (ready) void syncFromServer();
@@ -108,13 +116,18 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     api,
     unlocked,
     refreshConfig,
-    enablePin: async (pin) => {
+    enablePin: async (pin, recovery) => {
       await savePin(pin);
+      if (recovery?.securityQuestion?.trim() && recovery?.securityAnswer?.trim()) {
+        await saveSecurityQuestion(recovery.securityQuestion, recovery.securityAnswer);
+      }
       setUnlocked(true);
       try {
         await api.enableLock({
           pin,
           fingerprintEnabled: (await loadConfig()).fingerprintEnabled,
+          securityQuestion: recovery?.securityQuestion?.trim(),
+          securityAnswer: recovery?.securityAnswer?.trim(),
         });
       } catch {
         // Local lock still works offline

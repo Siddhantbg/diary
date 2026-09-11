@@ -6,7 +6,12 @@ import {
   Text,
   View,
 } from 'react-native';
-import { Audio } from 'expo-av';
+import {
+  createAudioPlayer,
+  setAudioModeAsync,
+  type AudioPlayer,
+  type AudioStatus,
+} from 'expo-audio';
 import { useSettings } from '@/context/SettingsContext';
 import { useTheme } from '@/context/ThemeContext';
 import { ActionSheet } from '@/components/ui/ActionSheet';
@@ -19,6 +24,13 @@ type Props = {
   uploading: boolean;
   onStopRecording?: () => void;
   onDelete?: (id: string) => void;
+};
+
+type PlayerWithEvents = AudioPlayer & {
+  addListener: (
+    event: 'playbackStatusUpdate',
+    listener: (status: AudioStatus) => void
+  ) => { remove: () => void };
 };
 
 function formatMs(ms: number) {
@@ -43,19 +55,28 @@ export function VoiceNotes({
   const [sheetOpen, setSheetOpen] = useState(false);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ title: string; message: string } | null>(null);
-  const soundRef = useRef<Audio.Sound | null>(null);
+  const soundRef = useRef<AudioPlayer | null>(null);
+  const statusSubRef = useRef<{ remove: () => void } | null>(null);
 
   useEffect(() => {
     return () => {
-      void soundRef.current?.unloadAsync();
+      statusSubRef.current?.remove();
+      statusSubRef.current = null;
+      try {
+        soundRef.current?.remove();
+      } catch {
+        // ignore
+      }
       soundRef.current = null;
     };
   }, []);
 
   const stopPlayback = async () => {
     try {
-      await soundRef.current?.stopAsync();
-      await soundRef.current?.unloadAsync();
+      statusSubRef.current?.remove();
+      statusSubRef.current = null;
+      soundRef.current?.pause();
+      soundRef.current?.remove();
     } catch {
       // ignore
     }
@@ -71,22 +92,19 @@ export function VoiceNotes({
     }
     await stopPlayback();
     try {
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
-        playsInSilentModeIOS: true,
+      await setAudioModeAsync({
+        allowsRecording: false,
+        playsInSilentMode: true,
       });
-      const { sound } = await Audio.Sound.createAsync(
-        { uri: api.voiceUrl(id) },
-        { shouldPlay: true }
-      );
-      soundRef.current = sound;
+      const player = createAudioPlayer({ uri: api.voiceUrl(id) }) as PlayerWithEvents;
+      soundRef.current = player;
       setPlayingId(id);
-      sound.setOnPlaybackStatusUpdate((status) => {
-        if (!status.isLoaded) return;
+      statusSubRef.current = player.addListener('playbackStatusUpdate', (status) => {
         if (status.didJustFinish) {
           void stopPlayback();
         }
       });
+      player.play();
     } catch (e: unknown) {
       setNotice({
         title: 'Playback',

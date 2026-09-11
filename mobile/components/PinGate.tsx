@@ -13,15 +13,17 @@ import { useTheme } from '@/context/ThemeContext';
 import { fonts, spacing } from '@/constants/theme';
 import { MyDiaryTitle } from '@/components/brand/DiaryMark';
 import { LockIcon } from '@/components/icons/LockIcon';
+import { cacheSecurityQuestion } from '@/lib/config';
 
 export function PinGate({ children }: { children: React.ReactNode }) {
-  const { ready, config, unlocked, unlockWithPin, unlock, recoverWithAnswer, api } =
+  const { ready, config, unlocked, unlockWithPin, unlock, recoverWithAnswer, api, refreshConfig } =
     useSettings();
   const { tokens, isDark } = useTheme();
   const [pin, setPin] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [recovering, setRecovering] = useState(false);
+  const [loadingQuestion, setLoadingQuestion] = useState(false);
   const [question, setQuestion] = useState('');
   const [answer, setAnswer] = useState('');
   const [newPin, setNewPin] = useState('');
@@ -46,20 +48,46 @@ export function PinGate({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!ready || unlocked || !config.pinEnabled || !recovering) return;
-    const localQ = config.securityQuestion;
-    if (localQ) {
-      setQuestion(localQ);
-      return;
-    }
+
+    let cancelled = false;
+    setLoadingQuestion(true);
+    setError('');
+
     void (async () => {
       try {
+        const localQ = config.securityQuestion?.trim();
+        if (localQ) {
+          if (!cancelled) setQuestion(localQ);
+          return;
+        }
         const remote = await api.getLock();
-        if (remote.securityQuestion) setQuestion(remote.securityQuestion);
+        const remoteQ = remote.securityQuestion?.trim() || '';
+        if (remoteQ) {
+          await cacheSecurityQuestion(remoteQ);
+          await refreshConfig();
+          if (!cancelled) setQuestion(remoteQ);
+        } else if (!cancelled) {
+          setQuestion('');
+        }
       } catch {
-        // offline
+        if (!cancelled) setQuestion(config.securityQuestion?.trim() || '');
+      } finally {
+        if (!cancelled) setLoadingQuestion(false);
       }
     })();
-  }, [ready, unlocked, config.pinEnabled, config.securityQuestion, recovering, api]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    ready,
+    unlocked,
+    config.pinEnabled,
+    config.securityQuestion,
+    recovering,
+    api,
+    refreshConfig,
+  ]);
 
   if (!ready) {
     return (
@@ -87,6 +115,11 @@ export function PinGate({ children }: { children: React.ReactNode }) {
   const submitRecover = async () => {
     setBusy(true);
     setError('');
+    if (!question.trim()) {
+      setError('No security question is set for this diary');
+      setBusy(false);
+      return;
+    }
     if (!answer.trim()) {
       setError('Enter your security answer');
       setBusy(false);
@@ -119,20 +152,23 @@ export function PinGate({ children }: { children: React.ReactNode }) {
       <View style={[styles.center, { backgroundColor: tokens.bg }]}>
         <LockIcon color={tokens.accent} variant={isDark ? 'dark' : 'light'} size={36} />
         <Text style={[styles.title, { color: tokens.text }]}>Forgot PIN</Text>
-        <Text style={[styles.sub, { color: tokens.textMuted }]}>
-          {question
-            ? question
-            : 'Answer your security question to set a new PIN. If you never set one, recovery is not available on this device.'}
-        </Text>
-        {question ? (
+
+        {loadingQuestion ? (
+          <ActivityIndicator color={tokens.accent} style={{ marginVertical: spacing.lg }} />
+        ) : question ? (
           <>
+            <Text style={[styles.sub, { color: tokens.textMuted }]}>
+              Answer this security question, then choose a new PIN.
+            </Text>
+            <Text style={[styles.question, { color: tokens.text }]}>{question}</Text>
             <TextInput
               style={[styles.inputText, { borderBottomColor: tokens.accent, color: tokens.text }]}
               value={answer}
               onChangeText={setAnswer}
-              placeholder="Answer"
+              placeholder="Your answer"
               placeholderTextColor={tokens.textSubtle}
               autoCapitalize="none"
+              autoCorrect={false}
             />
             <TextInput
               style={[styles.input, { borderBottomColor: tokens.accent, color: tokens.text }]}
@@ -154,19 +190,38 @@ export function PinGate({ children }: { children: React.ReactNode }) {
               placeholder="Confirm PIN"
               placeholderTextColor={tokens.textSubtle}
             />
+            {!!error && <Text style={[styles.error, { color: tokens.danger }]}>{error}</Text>}
+            <Pressable
+              style={[styles.button, { backgroundColor: tokens.fab }]}
+              onPress={() => void submitRecover()}
+              disabled={busy}
+            >
+              <Text style={styles.buttonText}>{busy ? '…' : 'Reset PIN'}</Text>
+            </Pressable>
           </>
-        ) : null}
-        {!!error && <Text style={[styles.error, { color: tokens.danger }]}>{error}</Text>}
-        {question ? (
-          <Pressable
-            style={[styles.button, { backgroundColor: tokens.fab }]}
-            onPress={() => void submitRecover()}
-            disabled={busy}
-          >
-            <Text style={styles.buttonText}>{busy ? '…' : 'Reset PIN'}</Text>
-          </Pressable>
-        ) : null}
-        <Pressable onPress={() => { setRecovering(false); setError(''); }} style={{ marginTop: 16 }}>
+        ) : (
+          <>
+            <Text style={[styles.sub, { color: tokens.textMuted }]}>
+              No security question is saved for this diary yet, so Forgot PIN can’t reset it.
+            </Text>
+            <Text style={[styles.sub, { color: tokens.textMuted, marginTop: 0 }]}>
+              If you still remember your PIN, unlock, open Mine → Set Diary Lock → Set Security
+              Question. New locks ask for a question when you turn them on.
+            </Text>
+            {!!error && <Text style={[styles.error, { color: tokens.danger }]}>{error}</Text>}
+          </>
+        )}
+
+        <Pressable
+          onPress={() => {
+            setRecovering(false);
+            setError('');
+            setAnswer('');
+            setNewPin('');
+            setNewPin2('');
+          }}
+          style={{ marginTop: 16 }}
+        >
           <Text style={{ color: tokens.textMuted, fontFamily: fonts.body }}>Back to PIN</Text>
         </Pressable>
       </View>
@@ -203,6 +258,7 @@ export function PinGate({ children }: { children: React.ReactNode }) {
       <Pressable
         onPress={() => {
           setError('');
+          setQuestion('');
           setRecovering(true);
         }}
         style={{ marginTop: spacing.lg }}
@@ -234,6 +290,13 @@ const styles = StyleSheet.create({
     fontSize: 16,
     textAlign: 'center',
     marginBottom: spacing.lg,
+  },
+  question: {
+    fontFamily: fonts.bodyMedium,
+    fontSize: 17,
+    textAlign: 'center',
+    marginBottom: spacing.md,
+    paddingHorizontal: spacing.sm,
   },
   input: {
     width: '70%',
